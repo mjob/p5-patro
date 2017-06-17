@@ -1,0 +1,11 @@
+# MANIFEST for p5-patro
+Changes
+lib/Patro.pm
+lib/Patro/LeumJelly.pm
+lib/Patro/N2.pm
+lib/Patro/Server.pm
+LICENSE
+Makefile.PL
+README.md
+t/00-load.t
+t/01-scalar.t

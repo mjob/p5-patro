@@ -1,8 +1,121 @@
 package Patro;
 use strict;
 use warnings;
+use Patro::LeumJelly;
+use Scalar::Util;
+use Data::Dumper;
+use Socket ();
+use Carp;
+use base 'Exporter';
+our @EXPORT = qw(patronize getProxies);
 
 our $VERSION = '0.10';
+
+sub import {
+    my ($class, @args) = @_;
+    my @tags = grep /^:/, @args;
+    @args = grep !/^:/, @args;
+    foreach my $tag (@tags) {
+	if ($tag eq ':test') {
+	    require Patro::Server;
+	    Patro::Server->TEST_MODE;
+	    # some tests will check if the remote object has changed
+	    # after being manipulated by the proxy. This can only
+	    # happen with a threaded server (or with certain objects
+	    # that do not maintain state in local memory), so we should
+	    # skip those tests if we are using the forked server.
+	    *ok_threaded = sub {
+		if ($Patro::Server::threads_avail) {
+		    goto &Test::More::ok;
+		} else {
+		    Test::More::ok(1, $_[1] ? "$_[1] - SKIPPED" :
+		       "skip test that requires threaded server");
+		}
+	    };
+	    push @EXPORT, 'ok_threaded';
+	}
+    }
+    Patro->export_to_level(1, 'Patro', @args, @EXPORT);
+}
+
+sub patronize {
+    croak 'usage: Patro::patronize(@refs)' if @_ == 0;
+    require Patro::Server;
+    my $server = Patro::Server->new({}, @_);
+    return $server->{config};
+}
+
+sub ref {
+    my $ref = CORE::ref($_[0]);
+    if (!Patro::LeumJelly::isProxyRef($ref)) {
+	return $ref;
+    }
+    my $handle = Patro::LeumJelly::handle($_[0]);
+    return $handle->{ref};
+}
+
+sub reftype {
+    my $ref = CORE::ref($_[0]);
+    if (!Patro::LeumJelly::isProxyRef($ref)) {
+	return Scalar::Util::reftype($_[0]);
+    }
+    my $handle = Patro::LeumJelly::handle($_[0]);
+    return $handle->{reftype};
+}
+
+sub main::xdiag {
+    if ($INC{'Test/More.pm'}) {
+	Test::More::diag(Data::Dumper::Dumper(@_));
+    } else {
+	print STDERR "ZZZZZ ", Data::Dumper::Dumper(@_);
+    }
+}
+
+# Patro OO-interface
+
+sub new {
+    my ($pkg,$config) = @_;
+    croak __PACKAGE__,": no host" unless $config->{host};
+    croak __PACKAGE__,": no port" unless $config->{port};
+
+    my $iaddr = Socket::inet_aton($config->{host});
+    my $paddr = Socket::pack_sockaddr_in($config->{port}, $iaddr);
+
+    socket(my $socket, Socket::PF_INET(), Socket::SOCK_STREAM(),
+	   getprotobyname("tcp")) or croak __PACKAGE__,": socket $!";
+    connect($socket,$paddr) 
+	or croak(__PACKAGE__, ": connect to $config->{host}:$config->{port}",
+		 " failed: $!");
+
+    my $self = bless {
+	config => $config,
+	socket => $socket,
+	proxies => {},
+	objs => [],
+    }, $pkg;
+
+    my $fh0 = select $socket;
+    $| = 1;
+    select $fh0;
+
+    foreach my $odata (@{$config->{store}}) {
+	my $proxyref = Patro::LeumJelly::getproxy($odata,$self);
+	$self->{proxies}{$odata->{id}} = $proxyref;
+	push @{$self->{objs}}, $proxyref;
+    }
+    return $self;
+}
+
+sub getProxies {
+    my $patro = shift;
+    if (CORE::ref($patro) eq 'HASH') {
+	# arg to getProxies is config hash, not Patro object
+	my $cfg = $patro;
+	$patro = Patro->new($cfg);
+    }
+    return @{$patro->{objs}};
+}
+
 
 1;
 
@@ -125,5 +238,29 @@ proxies to the shared references.
 
 Connects to a server on another machine, specified in the `CONFIG`
 string, and returns proxies to the list of references that are served.
+
+=head1 LICENSE AND COPYRIGHT
+
+MIT License
+
+Copyright (c) 2017, Marty O'Brien
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 =cut
