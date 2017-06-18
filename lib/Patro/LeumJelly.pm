@@ -50,6 +50,15 @@ sub getproxy {
 	$proxy->{scalar} = \$s;
 	return bless $proxy, 'Patro::N2';
     }
+
+    if ($proxy->{reftype} eq 'ARRAY') {
+	require Patro::N1;
+	tie my @a, 'Patro::Tie::ARRAY', $proxy;
+	$proxy->{array} = \@a;
+	return bless \$proxy, 'Patro::N1';
+    }
+
+    
     croak "unsupported remote object reftype '$objdata->{reftype}'";
 }
 

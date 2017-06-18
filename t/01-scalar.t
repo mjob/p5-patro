@@ -37,3 +37,7 @@ END {
 	sleep 10;
     }
 }
+
+# TODO:
+#  set a scalar-type object and perform method calls
+#  set value to another reference

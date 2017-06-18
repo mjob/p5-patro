@@ -402,7 +402,37 @@ sub process_request_HASH {
 }
 
 sub process_request_ARRAY {
-    die "topic 'ARRAY' not supported yet";
+    my ($self,$obj,$command,$has_args,$args) = @_;
+    if ($command eq 'STORE') {
+	my ($index,$val) = @$args;
+	return scalar_response( $obj->[$index] = $val );
+    } elsif ($command eq 'FETCH') {
+	return scalar_response( $obj->[$args->[0]] );
+    } elsif ($command eq 'FETCHSIZE') {
+	return scalar_response( scalar @$obj );
+    } elsif ($command eq 'STORESIZE') {
+	my $n = $#{$obj} = $args->[0];
+	return scalar_response($n+1);
+    } elsif ($command eq 'SPLICE') {
+	my ($off,$len,@list) = @$args;
+	if ($len eq 'undef') {
+	    $len = @{$obj} - $off;
+	}
+	my @val = splice @{$obj},$off,$len,@list;
+	return list_response(@val);
+    } elsif ($command eq 'PUSH') {
+	my $n = push @{$obj}, @$args;
+	return scalar_response($n);
+    } elsif ($command eq 'UNSHIFT') {
+	my $n = unshift @$obj, @$args;
+	return scalar_response($n);
+    } elsif ($command eq 'POP') {
+	return scalar_response(pop @$obj);
+    } elsif ($command eq 'SHIFT') {
+	return scalar_response(shift @$obj);
+    }
+
+    die "tied ARRAY function '$command' not recognized";
 }
 
 sub process_request_SCALAR {
@@ -422,6 +452,14 @@ sub scalar_response {
     return +{
 	context => 1,
 	response => $val
+    };
+}
+
+sub list_response {
+    my @val = @_;
+    return +{
+	context => 2,
+	response => \@val
     };
 }
 
