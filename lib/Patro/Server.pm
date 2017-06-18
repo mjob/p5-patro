@@ -8,12 +8,17 @@ use POSIX ':sys_wait_h';
 require overload;
 
 our $threads_avail = eval "use threads; use threads::shared; 1";
+if (defined $ENV{PATRO_THREADS}) {
+    $threads_avail = $ENV{PATRO_THREADS};
+}
 
 our $VERSION = '0.10';
 our @SERVERS :shared;
-
-$threads_avail = 1;  # ZZZZZ
-
+our %OPTS = { # XXX - needs documentation
+    keep_alive => 30,
+    idle_timeout => 30,
+    fincheck_freq => 5,
+};
 
 sub new {
     my $pkg = shift;
@@ -47,8 +52,8 @@ sub new {
 	creator_tid => $threads_avail && threads->tid,
 	style => $threads_avail ? 'threaded' : 'forked',
 
-	keep_alive => 10,
-	idle_timeout => 10,
+	keep_alive => $OPTS{keep_alive},
+	idle_timeout => $OPTS{idle_timeout}
     };
 
     my $obj = {};
@@ -92,9 +97,12 @@ sub start_server {
     my $self = shift;
     my $meta = $self->{meta};
     if ($meta->{style} eq 'threaded') {
-	my $server_thread = threads->create(
+	my $server_thread;
+	$server_thread = threads->create(
 	    sub {
 		$SIG{KILL} = sub { exit };
+		$SIG{CHLD} = sub { $self->watch_for_finishers(@_) };
+		$SIG{ALRM} = sub { $self->watch_for_finishers(@_) };
 		if ($self->{meta}{pid_file}) {
 		    open my $fh, '>>', $self->{meta}{pid_file};
 		    flock $fh, 2;
@@ -102,13 +110,14 @@ sub start_server {
 		    print $fh "$$-", threads->tid, "\n";
 		    close $fh;
 		}
-		$self->process_requests;
+		$self->accept_clients;
 		return;
 	    } );
 	$self->{meta}{server_thread} = $server_thread;
 	$self->{meta}{server_pid} = $$;
 	$self->{meta}{server_tid} = $server_thread->tid;
-	$server_thread->detach;
+	#$server_thread->detach;
+
     } else {
 	my $pid = CORE::fork();
 	if (!defined($pid)) {
@@ -122,7 +131,7 @@ sub start_server {
 		print $fh "$$\n";
 		close $fh;
 	    }
-	    $self->process_requests;
+	    $self->accept_clients;
 	    exit;
 	}
 	$self->{meta}{server_pid} = $pid;
@@ -154,7 +163,7 @@ sub config {
     return $config_data;
 }
 
-sub process_requests {
+sub accept_clients {
     # accept connection from client
     # spin off connection to separate thread or process
     # perform request_response_loop on the client connection
@@ -164,10 +173,10 @@ sub process_requests {
     $meta->{last_connection} = time;
     $meta->{finished} = 0;
 
-    $SIG{CHLD} = sub { $self->watch_for_finishers };
-    $SIG{ALRM} = sub { $self->watch_for_finishers };
     while (!$meta->{finished}) {
-	alarm 5;
+	$SIG{CHLD} = sub { $self->watch_for_finishers(@_) };
+	$SIG{ALRM} = sub { $self->watch_for_finishers(@_) };
+	alarm ($OPTS{fincheck_freq} || 5);
 	my $client;
 	my $server = $meta->{socket};
 	my $paddr = accept($client,$server);
@@ -180,6 +189,7 @@ sub process_requests {
 	$meta->{last_connection} = time;
 
 	$self->start_subserver($client);
+	$self->watch_for_finishers('MAIN');
     }
 }
 
@@ -204,10 +214,12 @@ sub start_subserver {
 	$self->request_response_loop($client);
 	exit;
     } else {
-	my $subthread = threads->create( sub {
-	    $self->request_response_loop($client);
-	    return;
-					 } );
+	my $subthread = threads->create(
+	    sub {
+		$self->request_response_loop($client);
+		threads->self->detach;
+		return;
+	    } );
 	if ($self->{meta}{pid_file}) {
 	    open my $fh, '>>', $self->{meta}{pid_file};
 	    flock $fh, 2;
@@ -216,6 +228,7 @@ sub start_subserver {
 	    close $fh;
 	}
 	$self->{meta}{pids}{"$$-" . $subthread->tid}++;
+	push @{$self->{meta}{subthreads}}, $subthread;
 
 	# $subthread->detach ?
 	
@@ -224,24 +237,57 @@ sub start_subserver {
 }
 
 sub watch_for_finishers {
-    my $self = shift;
+    my ($self,$sig) = @_;
     alarm 0;
     
     # XXX - how do you know when a thread is finished?
     # what if it is a detached thread?
+
     while ((my $pid = waitpid(-1,WNOHANG())) > 0 && WIFEXITED($?)) {
 	delete $self->{meta}{pids}{$pid};
     }
-    $self->{meta}{finished}++ unless $self->still_active;
-    alarm 5;
+    if ($self->{meta}{subthreads}) {
+	my $n = @{$self->{meta}{subthreads}};
+	my $n1 = threads->list(threads::all());
+	my $n2 = threads->list(threads::running());
+	my @joinable = threads->list(threads::joinable());
+#	::xdiag("thread status $n/$n1/$n2/" . scalar(@joinable));
+	if (@joinable) {
+	    foreach my $subthread  (@joinable) {
+		my ($i) = grep {
+		    $self->{meta}{subthreads}{$_} == $subthread 
+		} 0 .. $n-1;
+		if (!defined($i)) {
+		    warn "subthread $subthread not found on this server!";
+		    next;
+		}
+		$self->{meta}{subthreads}[$i]->join;
+		$self->{meta}{subthreads}[$i] = undef;
+	    }
+	    $self->{meta}{subthreads} =
+		[ grep { defined } @{$self->{meta}{subthreads} } ];
+	}
+    }
+    unless ($self->still_active) {
+	$self->{meta}{finished}++;
+    }
+    $SIG{ALRM} = sub { $self->watch_for_finishers(@_) };
+    $SIG{CHLD} = sub { $self->watch_for_finishers(@_) };
+    alarm ($OPTS{fincheck_freq} || 5);
 }
 
 sub still_active {
     my $self = shift;
     my $meta = $self->{meta};
-    return 1 if time <= $meta->{keep_alive};
-    return 1 if time < $meta->{last_connection} + $meta->{idle_timeout};
-    return 1 if keys %{$meta->{pids}};
+    if (time <= $meta->{keep_alive}) {
+	return 1;
+    }
+    if (time < $meta->{last_connection} + $meta->{idle_timeout}) {
+	return 1;
+    }
+    if (keys %{$meta->{pids}}) {
+	return 1;
+    }
     return;
 }
 
@@ -385,6 +431,12 @@ sub error_response {
 }
 
 sub TEST_MODE {
+    $OPTS{keep_alive} = 2;
+    $OPTS{fincheck_freq} = 2;
+    $OPTS{idle_timeout} = 1;
+    if ($threads_avail) {
+	$OPTS{fincheck_freq} = "0 but true";	    
+    }
 }
 
 1;

@@ -35,7 +35,7 @@ sub AUTOLOAD {
 
 sub DESTROY {
     my $self = shift;
-    $self->{_DESTROY}++;
+    return if $self->{_DESTROY}++;
     my $socket = $self->{socket};
     if ($socket) {
 

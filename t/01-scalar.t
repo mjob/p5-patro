@@ -2,6 +2,9 @@ use Test::More;
 use Patro ':test';
 use Scalar::Util 'reftype';
 
+my $main_pid = $$;
+$SIG{ALRM} = sub { warn "SIGALRM! \@ ",scalar localtime; };
+
 my $foo = "42";
 my $obj = \$foo;
 
@@ -26,3 +29,11 @@ is($$proxy, 471, 'update scalar with assignment operator');
 ok_threaded($$obj == 471, 'update proxy changes remote object');
 
 done_testing;
+
+END {
+    if (0 && $$ == $main_pid) {
+	$proxy->DESTROY;
+	undef $proxy;
+	sleep 10;
+    }
+}

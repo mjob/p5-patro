@@ -65,7 +65,14 @@ sub reftype {
 
 sub main::xdiag {
     if ($INC{'Test/More.pm'}) {
-	Test::More::diag(Data::Dumper::Dumper(@_));
+	my @lt = localtime;
+	my $lt = sprintf "%02d:%02d:%02d", @lt[2,1,0];
+	my $pid = $$;
+	if ($Patro::Server::threads_avail) {
+	    $pid .= "-" . threads->tid;
+	}
+	Test::More::diag("xdiag $pid $lt: ",
+	    map { CORE::ref($_) ? Data::Dumper::Dumper($_) : $_ } @_ );
     } else {
 	print STDERR "ZZZZZ ", Data::Dumper::Dumper(@_);
     }
@@ -139,7 +146,7 @@ Patro - proxy access to remote objects
     # on machines 2 through n (clients)
     use Patro;
     open my $fh, '<config_file'; my $config=<$fh>; close $fh;
-    my ($proxy) = getProxies($config);
+    my ($proxy) = Patro->new($config)->getProxies;
     ...
     $proxy->{key} = $val;         # updates $obj->{key} for obj on server
     $val = $proxy->method(@args); # calls $obj->method for obj on server
@@ -170,7 +177,7 @@ is done with the same syntax as with the local reference:
 
     # host 2
     use Patro;
-    my $hash2 = getProxies($config);
+    my $hash2 = Patro->new($config)->getProxies;
     print $hash2->{abc};                # "123"
     $hash2->{def}[2] = "pqr";           # updates $hash1 on host 1
     print delete $hash2->{def}[1]{ghi}; # "jkl", updates $hash1 on host1
@@ -189,7 +196,7 @@ affecting the remote object and returning the result of the call.
 
     # host 2
     use Patro;
-    my $foo = getProxies($config);
+    my $foo = Patro->new($config)->getProxies;
     my @x = $foo->blerp;           # (5,6,7,17)
     my $x = $foo->blerp;           # 18
 
@@ -238,6 +245,17 @@ proxies to the shared references.
 
 Connects to a server on another machine, specified in the `CONFIG`
 string, and returns proxies to the list of references that are served.
+
+=head1 ENVIRONMENT
+
+C<Patro> pays attention to the following environment variables.
+
+=head2 PATRO_THREADS
+
+If the environment variable C<PATRO_THREADS> is set, C<Patro> will use
+it to determine whether to use a forked server or a threaded server
+to provide proxy access to objects. If this variable is not set,
+C<Patro> will use threads if the L<threads> module can be loaded.
 
 =head1 LICENSE AND COPYRIGHT
 
