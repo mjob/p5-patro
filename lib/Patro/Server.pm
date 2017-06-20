@@ -344,11 +344,11 @@ sub process_request {
 	} else {
 	    my $obj = $self->{obj}{$id};
 	    if ($command eq 'ref') {
-		return scalar_response(ref($obj));
+		return $self->scalar_response(ref($obj));
 	    } elsif ($command eq 'reftype') {
-		return scalar_response(Scalar::Util::reftype($obj));
+		return $self->scalar_response(Scalar::Util::reftype($obj));
 	    } else {
-		return error_response(
+		return $self->error_response(
 		    "Patro: unsupported meta command '$command'");
 	    }
 	}
@@ -357,43 +357,44 @@ sub process_request {
     elsif ($topic eq 'HASH') {
 	my $obj = $self->{obj}{$id};
 	if (Scalar::Util::reftype($obj) ne 'HASH') {
-	    return error_response("Not a HASH reference");
+	    return $self->error_response("Not a HASH reference");
 	}
 	my $resp = eval { $self->process_request_HASH(
 			      $obj,$command,$has_args,$args) };
-	return $@ ? error_response($@) : $resp;
+	return $@ ? $self->error_response($@) : $resp;
     }
 
     elsif ($topic eq 'ARRAY') {
 	my $obj = $self->{obj}{$id};
 	if (Scalar::Util::reftype($obj) ne 'ARRAY') {
-	    return error_response("Not an ARRAY reference");
+	    return $self->error_response("Not an ARRAY reference");
 	}
 	my $resp = eval { $self->process_request_ARRAY(
 			      $obj,$command,$has_args,$args) };
-	return $@ ? error_response($@) : $resp;
+	return $@ ? $self->error_response($@) : $resp;
     }
 
     elsif ($topic eq 'SCALAR') {
 	my $obj = $self->{obj}{$id};
 	if (Scalar::Util::reftype($obj) ne 'SCALAR') {
-	    return error_response("Not a SCALAR reference");
+	    return $self->error_response("Not a SCALAR reference");
 	}
 	my $resp = eval { $self->process_request_SCALAR(
 			      $obj,$command,$has_args,$args) };
-	return $@ ? error_response($@) : $resp;
+	return $@ ? $self->error_response($@) : $resp;
     }
 
     elsif ($topic eq 'METHOD') {
-	return error_response("topic:'METHOD' not supported yet");
+	return $self->error_response("topic:'METHOD' not supported yet");
     }
 
     elsif ($topic eq 'OVERLOAD') {
-	return error_response("topic:'OVERLOAD' not supported yet");
+	return $self->error_response("topic:'OVERLOAD' not supported yet");
     }
 
     else {
-	return error_reponse(__PACKAGE__,": unrecognized topic '$topic'");
+	return $self->error_reponse(
+	    __PACKAGE__,": unrecognized topic '$topic'");
     }
 }
 
@@ -405,50 +406,69 @@ sub process_request_ARRAY {
     my ($self,$obj,$command,$has_args,$args) = @_;
     if ($command eq 'STORE') {
 	my ($index,$val) = @$args;
-	return scalar_response( $obj->[$index] = $val );
+	return $self->scalar_response( $obj->[$index] = $val );
     } elsif ($command eq 'FETCH') {
-	return scalar_response( $obj->[$args->[0]] );
+	return $self->scalar_response( $obj->[$args->[0]] );
     } elsif ($command eq 'FETCHSIZE') {
-	return scalar_response( scalar @$obj );
+	return $self->scalar_response( scalar @$obj );
     } elsif ($command eq 'STORESIZE') {
 	my $n = $#{$obj} = $args->[0];
-	return scalar_response($n+1);
+	return $self->scalar_response($n+1);
     } elsif ($command eq 'SPLICE') {
 	my ($off,$len,@list) = @$args;
 	if ($len eq 'undef') {
 	    $len = @{$obj} - $off;
 	}
 	my @val = splice @{$obj},$off,$len,@list;
-	return list_response(@val);
+	return $self->list_response(@val);
     } elsif ($command eq 'PUSH') {
-	my $n = push @{$obj}, @$args;
-	return scalar_response($n);
+	my $n = push @{$obj}, _share(@$args);
+	return $self->scalar_response($n);
     } elsif ($command eq 'UNSHIFT') {
-	my $n = unshift @$obj, @$args;
-	return scalar_response($n);
+	my $n = unshift @$obj, _share(@$args);
+	return $self->scalar_response($n);
     } elsif ($command eq 'POP') {
-	return scalar_response(pop @$obj);
+	return $self->scalar_response(pop @$obj);
     } elsif ($command eq 'SHIFT') {
-	return scalar_response(shift @$obj);
+	return $self->scalar_response(shift @$obj);
     }
 
     die "tied ARRAY function '$command' not recognized";
+}
+
+sub _share {
+    if (!$threads_avail) {
+	return @_;
+    } else {
+	return map {
+	    CORE::ref($_) ? shared_clone($_) : $_
+	} @_
+    }
 }
 
 sub process_request_SCALAR {
     my ($self,$obj,$command,$has_args,$args) = @_;
     if ($command eq 'STORE') {
 	${$obj} = $args->[0];
-	return scalar_response(${$obj});
+	return $self->scalar_response(_share(${$obj}));
     } elsif ($command eq 'FETCH') {
-	my $return = scalar_response(${$obj});
+	my $return = $self->scalar_response(${$obj});
 	return $return;
     }
     die "topic 'SCALAR': command '$command' not recognized";
 }
 
+# we should not send any serialized references to the client.
+# any references in a response should be replaced with handles
+# that the client may use to obtain further information about
+# the reference from the server
+sub patrol {
+    my ($self,$server) = @_;
+    ...
+}
+
 sub scalar_response {
-    my ($val) = @_;
+    my ($self,$val) = @_;
     return +{
 	context => 1,
 	response => $val
@@ -456,7 +476,7 @@ sub scalar_response {
 }
 
 sub list_response {
-    my @val = @_;
+    my ($self,@val) = @_;
     return +{
 	context => 2,
 	response => \@val
@@ -464,7 +484,7 @@ sub list_response {
 }
 
 sub error_response {
-    my (@msg) = @_;
+    my ($self,@msg) = @_;
     return { error => join('',@msg) };
 }
 

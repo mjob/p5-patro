@@ -38,6 +38,9 @@ sub import {
     Patro->export_to_level(1, 'Patro', @args, @EXPORT);
 }
 
+# make Patro::nize a synonym for patronize
+sub nize { goto &patronize }
+
 sub patronize {
     croak 'usage: Patro::patronize(@refs)' if @_ == 0;
     require Patro::Server;
