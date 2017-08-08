@@ -36,7 +36,6 @@ is($r1->[7], 2, 'unshift to remote array');
 is(pop @$r1, 18, 'pop from remote array');
 
 my $r6 = $r1->[10];
-::xdiag($r6);
 is(CORE::ref($r6), 'Patro::N1', 'proxy handle for nested remote obj');
 
 done_testing;

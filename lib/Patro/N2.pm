@@ -43,7 +43,7 @@ sub DESTROY {
 	# only when all of the wrapped objects associated with a
 	# client have been destroyed, or during global
 	# destruction
-	
+
 	Patro::LeumJelly::proxy_request( $self,
 	    { id => $self->{id},
 	      topic => 'META',

@@ -35,6 +35,8 @@ sub deserialize {
     $VAR1;
 }
 
+# return a Patro::N1 or Patro::N2 object appropriate for the
+# object metadata (containing id, ref, reftype values) and client.
 sub getproxy {
     my ($objdata,$client) = @_;
     croak unless $objdata->{id} && $objdata->{ref} && $objdata->{reftype};
@@ -58,7 +60,6 @@ sub getproxy {
 	return bless \$proxy, 'Patro::N1';
     }
 
-    
     croak "unsupported remote object reftype '$objdata->{reftype}'";
 }
 
@@ -119,7 +120,37 @@ sub proxy_request {
 sub deserialize_response {
     my ($response,$client) = @_;
     $response = deserialize($response);
+
+    # Does the response contain SCALAR references?
+    # Does the response have meta information for these
+    # dereferenced SCALAR values?
+    # Then they must be converted to Patro::Nx objects.
+
+    if ($response->{context}) {
+	if ($response->{context} == 1) {
+	    $response->{response} = depatrol($client,
+					     $response->{response},
+					     $response->{meta})
+	} elsif ($response->{context} == 2) {
+	    $response->{response} = [ map depatrol($client,
+						   $_, $response->{meta}),
+				      @{$response->{response}} ];
+	}
+    }
     return $response;
+}
+
+sub depatrol {
+    my ($client, $obj, $meta) = @_;
+    if (ref($obj) ne 'SCALAR') {
+	return $obj;
+    }
+    my $id = $$obj;
+    if (!$meta->{$id}) {
+	warn "depatrol: reference $obj is not referred to in meta";
+	return $obj;
+    }
+    return getproxy($meta->{$id}, $client);
 }
 
 1;

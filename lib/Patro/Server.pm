@@ -4,6 +4,7 @@ use warnings;
 use Carp;
 eval "use Sys::HostAddr";
 use Socket ();
+use Scalar::Util 'reftype';
 use POSIX ':sys_wait_h';
 require overload;
 
@@ -14,11 +15,11 @@ if (defined $ENV{PATRO_THREADS}) {
 
 our $VERSION = '0.10';
 our @SERVERS :shared;
-our %OPTS = { # XXX - needs documentation
+our %OPTS = ( # XXX - needs documentation
     keep_alive => 30,
     idle_timeout => 30,
     fincheck_freq => 5,
-};
+);
 
 sub new {
     my $pkg = shift;
@@ -144,7 +145,7 @@ sub _overloads {
     if (!overload::Overloaded($obj)) {
 	return;
     }
-    
+
     my @overloads;
     foreach my $opses (values %overload::ops) {
 	push @overloads,
@@ -231,7 +232,7 @@ sub start_subserver {
 	push @{$self->{meta}{subthreads}}, $subthread;
 
 	# $subthread->detach ?
-	
+
 	return;
     }
 }
@@ -239,7 +240,7 @@ sub start_subserver {
 sub watch_for_finishers {
     my ($self,$sig) = @_;
     alarm 0;
-    
+
     # XXX - how do you know when a thread is finished?
     # what if it is a detached thread?
 
@@ -314,7 +315,10 @@ sub serialize_response {
     my ($self, $resp) = @_;
     if ($resp->{context}) {
 	if ($resp->{context} == 1) {
-	} else {
+	    $resp->{response} = patrol($self,$resp,$resp->{response});
+	} elsif ($resp->{context} == 2) {
+	    $resp->{response} = [
+		map patrol($self,$resp,$_), @{$resp->{response}} ];
 	}
     }
     $resp = Patro::LeumJelly::serialize($resp);
@@ -458,13 +462,27 @@ sub process_request_SCALAR {
     die "topic 'SCALAR': command '$command' not recognized";
 }
 
-# we should not send any serialized references to the client.
-# any references in a response should be replaced with handles
-# that the client may use to obtain further information about
-# the reference from the server
+# we should not send any serialized references back to the client.
+# replace any references in the response with an
+# object id.
 sub patrol {
-    my ($self,$server) = @_;
-    ...
+    my ($self,$resp,$obj) = @_;
+    return $obj unless ref($obj);
+    my $id = do {
+	no overloading;
+	0 + $obj;
+    };
+
+    if (!$self->{obj}{$id}) {
+	$self->{obj}{$id} = $obj;
+	$resp->{meta}{$id} = {
+	    id => $id, ref => ref($obj), reftype => reftype($obj)
+	};
+	if (overload::Overloaded($obj)) {
+	    $resp->{meta}{overload} = _overloads($obj);
+	}
+    }
+    return \$id;
 }
 
 sub scalar_response {
