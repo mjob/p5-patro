@@ -37,5 +37,6 @@ is(pop @$r1, 18, 'pop from remote array');
 
 my $r6 = $r1->[10];
 is(CORE::ref($r6), 'Patro::N1', 'proxy handle for nested remote obj');
+is(Patro::ref($r6), 'ARRAY', 'got remote ref type');
 
 done_testing;

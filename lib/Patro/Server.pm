@@ -67,8 +67,10 @@ sub new {
 	my ($num,$str);
 	{
 	    no overloading;
+	    no warnings 'portable';
 	    $str = "$o";
-	    $num = hex($str =~ /x(\w+)/);
+	    ($num) = $str =~ /x(\w+)/;
+	    $num = hex($num);
 	}
 	$obj->{$num} = $o;
 	my $reftype = Scalar::Util::reftype($o);
@@ -351,6 +353,16 @@ sub process_request {
 		return $self->scalar_response(ref($obj));
 	    } elsif ($command eq 'reftype') {
 		return $self->scalar_response(Scalar::Util::reftype($obj));
+	    } elsif ($command eq 'destroy') {
+		delete $self->{obj}{$id};
+		my @ids = keys %{$self->{obj}};
+		if (@ids == 0) {
+		    return { disconnect_ok => 1 };
+		    $Patro::Server::disconnect = 1;
+		} else {
+		    return { disconnect_ok => 0,
+			     num_remaining_objs => 0+@ids };
+		}
 	    } else {
 		return $self->error_response(
 		    "Patro: unsupported meta command '$command'");
@@ -403,7 +415,33 @@ sub process_request {
 }
 
 sub process_request_HASH {
-    die "topic 'HASH' not supported yet";
+    my ($self,$obj,$command,$has_args,$args) = @_;
+    if ($command eq 'STORE') {
+	my ($key,$val) = @$args;
+	my $old_val = $obj->{$key};
+	$obj->{$key} = $val;
+	return $self->scalar_response($old_val);
+    } elsif ($command eq 'FETCH') {
+	return $self->scalar_response( $obj->{$args->[0]} );
+    } elsif ($command eq 'DELETE') {
+	return $self->scalar_response( delete $obj->{$args->[0]} );
+    } elsif ($command eq 'EXISTS') {
+	return $self->scalar_response( exists $obj->{$args->[0]} );
+    } elsif ($command eq 'CLEAR') {
+	%$obj = ();
+	return $self->void_response;
+    } elsif ($command eq 'FIRSTKEY') {
+	keys %$obj;
+	my ($k,$v) = each %$obj;
+	return $self->scalar_response($k);
+    } elsif ($command eq 'NEXTKEY') {
+	my ($k,$v) = each %$obj;
+	return $self->scalar_response($k);
+    } elsif ($command eq 'SCALAR') {
+	my $n = scalar %$obj;
+	return $self->scalar_response($n);
+    }
+    die "tied HASH function '$command' not recognized";
 }
 
 sub process_request_ARRAY {
@@ -483,6 +521,10 @@ sub patrol {
 	}
     }
     return \$id;
+}
+
+sub void_response {
+    return +{ context => 0, response => undef };
 }
 
 sub scalar_response {

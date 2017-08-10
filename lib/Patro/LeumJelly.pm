@@ -60,6 +60,13 @@ sub getproxy {
 	return bless \$proxy, 'Patro::N1';
     }
 
+    if ($proxy->{reftype} eq 'HASH') {
+	require Patro::N1;
+	tie my %h, 'Patro::Tie::HASH', $proxy;
+	$proxy->{hash} = \%h;
+	return bless \$proxy, 'Patro::N1';
+    }
+
     croak "unsupported remote object reftype '$objdata->{reftype}'";
 }
 
@@ -98,8 +105,8 @@ sub proxy_request {
     if ($resp->{error}) {
 	croak $resp->{error};
     }
-    if ($resp->{disconnect_ok}) {
-	return;
+    if (exists $resp->{disconnect_ok}) {
+	return $resp;
     }
     if ($resp->{context} == 0) {
 	return;

@@ -3,14 +3,13 @@ use strict;
 use warnings;
 
 # we must keep this namespace very clean
-
 use Carp ();
 use Socket ();
 use Data::Dumper ();
 
 use overload
     '@{}' => sub { ${$_[0]}->{array} },
-    '%{}' => sub { Carp::croak },
+    '%{}' => sub { ${$_[0]}->{hash} },
     'nomethod' => \&Patro::LeumJelly::overload_handler,
     ;
 
@@ -36,7 +35,9 @@ sub AUTOLOAD {
 
 sub DESTROY {
     my $self = shift;
-    return if $$self->{_DESTROY}++;
+    if ($$self->{_DESTROY}++) {
+	return;
+    }
     my $socket = $$self->{socket};
     if ($socket) {
 
@@ -45,15 +46,22 @@ sub DESTROY {
 	# client have been destroyed, or during global
 	# destruction
 
-	Patro::LeumJelly::proxy_request( $$self,
+	my $response = Patro::LeumJelly::proxy_request(
+	    $$self,
 	    { id => $$self->{id},
 	      topic => 'META',
-	      command => 'disconnect' } );
-	close $socket;
+	      #command => 'disconnect' } );
+	      command => 'destroy' } );
+	if ($response->{disconnect_ok}) {
+	    close $socket;
+	    delete $$self->{socket};
+	}
     }
 }
 
-# tie class for proxy object. Operations on the proxy object
+############################################################
+
+# tie class for array proxy object. Operations on the proxy object
 # are forwarded to the remote server
 
 sub Patro::Tie::ARRAY::TIEARRAY {
@@ -92,5 +100,41 @@ sub Patro::Tie::ARRAY::SPLICE {
     my $len = @_ ? shift : 'undef';
     return $tied->__('SPLICE',2,$off,$len,@_);
 }
+
+############################################################
+
+# tie class for hash proxy object. Operations on the proxy
+# are forwarded to the remote server
+
+sub Patro::Tie::HASH::TIEHASH {
+    my ($pkg,$proxy) = @_;
+    return bless { obj => $proxy, id => $proxy->{id} }, $pkg;
+}
+
+sub Patro::Tie::HASH::__ {
+    my ($tied,$name,$context,@args) = @_;
+    if (!defined($context)) {
+	$context = defined(wantarray) ? 1 + wantarray : 0;
+    }
+    return Patro::LeumJelly::proxy_request(
+	$tied->{obj},
+	{ topic => 'HASH',
+	  command => $name,
+	  context => $context,
+	  has_args => @_ > 0,
+	  args => [ @args ],
+	  id => $tied->{id} } );
+}
+
+sub Patro::Tie::HASH::FETCH { return shift->__('FETCH',1,@_) }
+sub Patro::Tie::HASH::STORE { return shift->__('STORE',0,@_) }
+sub Patro::Tie::HASH::DELETE { return shift->__('DELETE',1,@_) }
+sub Patro::Tie::HASH::CLEAR { return shift->__('CLEAR',0) }
+sub Patro::Tie::HASH::EXISTS { return shift->__('EXISTS',1,@_) }
+sub Patro::Tie::HASH::FIRSTKEY { return shift->__('FIRSTKEY',1,@_) }
+sub Patro::Tie::HASH::NEXTKEY { return shift->__('NEXTKEY',1,@_) }
+sub Patro::Tie::HASH::SCALAR { return shift->__('SCALAR',1) }
+
+############################################################
 
 1;
