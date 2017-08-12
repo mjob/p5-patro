@@ -66,6 +66,13 @@ sub reftype {
     return $handle->{reftype};
 }
 
+sub client {
+    if (!Patro::LeumJelly::isProxyRef(CORE::ref($_[0]))) {
+	return;     # not a remote proxy object
+    }
+    return Patro::LeumJelly::handle($_[0])->{client};
+}
+
 sub main::xdiag {
     if ($INC{'Test/More.pm'}) {
 	my @lt = localtime;
@@ -244,10 +251,36 @@ proxies to the shared references.
 
 =head2 getProxies
 
-    REFS = getProxies(CONFIG)
+    PROXIES = getProxies(CONFIG)
 
 Connects to a server on another machine, specified in the `CONFIG`
 string, and returns proxies to the list of references that are served.
+
+=head2 ref
+
+    TYPE = Patro::ref(PROXY)
+
+For the given proxy object, returns the ref type of the remote object
+being served. If the input is not a proxy, returns C<undef>.
+See also L<"reftype">.
+
+=head2 reftype
+
+    TYPE = Patro::reftype(PROXY)
+
+Returns the simple reference type (e.g., C<ARRAY>) of the remote
+object associated with the given proxy, as if we were calling
+C<Scalar::Util::reftype> on the remote object. Returns C<undef> if
+the input is not a proxy object.
+
+=head2 client
+
+    CLIENT = Patro::client(PROXY)
+
+Returns the IPC client object used by the given proxy to communicate
+with the remote object server. The client object contains information
+about how to communicate with the server and other connection 
+configuration.
 
 =head1 ENVIRONMENT
 

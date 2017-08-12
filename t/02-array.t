@@ -15,9 +15,12 @@ my ($r1) = Patro->new($cfg)->getProxies;
 
 ok($r1, 'client as boolean');
 is(CORE::ref($r1), 'Patro::N1', 'client ref');
-
 is(Patro::ref($r1), 'ARRAY', 'remote ref');
 is(Patro::reftype($r1), 'ARRAY', 'remote reftype');
+
+my $c = Patro::client($r1);
+ok($c, 'got client for remote obj');
+my $THREADED = $c->{config}{style} eq 'threaded';
 
 is($r1->[3], 4, 'array access');
 
@@ -26,6 +29,10 @@ is($r1->[-3], 4, 'push to remote array');
 
 $r1->[2] = 19;
 is($r1->[2], 19, 'set remote array');
+if ($THREADED) {
+    is($r0->[-3], 4, 'local update affects remote object');
+    is($r0->[2], 19, 'local update affects remote object');
+}
 
 is(shift @$r1, 1, 'shift from remote array');
 

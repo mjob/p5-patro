@@ -20,9 +20,19 @@ is(Patro::ref($r1), 'HASH', 'remote ref');
 is(Patro::reftype($r1),'HASH', 'remote reftype');
 ok(tied(%$r1), 'proxy var is tied when deref as hash');
 
+my $c = Patro::client($r1);
+ok($c, 'retrieved client object');
+my $THREADED = $c->{config}{style} eq 'threaded';
+
 is($r1->{def}, 'foo', 'hash access');
 $r1->{bar} = 456;
 is($r1->{bar}, 456, 'add to remote hash');
+if ($THREADED) {
+    is($r0->{bar}, 456, 'update to remote hash changes local hash');
+    $r0->{bar} = 409;
+    is($r1->{bar}, 409, 'update to local hash changes remote hash');
+}
+
 
 is($r1->{ghi}{wxy}, 123, 'hash deep access');
 $r1->{ghi}{wxy} = 789;
@@ -36,6 +46,10 @@ is(Patro::ref($r1->{ghi}{jkl}), 'ARRAY', '2nd level val is ARRAY ref');
 is(delete $r1->{abc}, 'xyz', 'delete from remote hash');
 is($r1->{abc}, undef, 'delete from remote hash cleared key');
 ok(!exists $r1->{abc}, 'delete from remote hash makes exists fail');
+if ($THREADED) {
+    is($r0->{ghi}{wxy}, 789, 'deep update to remote obj changes local obj');
+    ok(!exists $r1->{abc}, 'delete from remote obj changes local obj');
+}
 
 done_testing;
 

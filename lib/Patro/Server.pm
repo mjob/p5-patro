@@ -161,7 +161,9 @@ sub config {
     my $config_data = {
 	host => $self->{meta}{host},
 	port => $self->{meta}{port},
-	store => $self->{store}
+	store => $self->{store},
+	style => $self->{meta}{style}
+	
     };
     return $config_data;
 }
@@ -401,7 +403,25 @@ sub process_request {
     }
 
     elsif ($topic eq 'METHOD') {
-	return $self->error_response("topic:'METHOD' not supported yet");
+	my @r;
+	my $obj = $self->{obj}{$id};
+	if ($ctx < 2) {
+	    @r = scalar eval { $has_args ? $obj->$command(@$args)
+				   : $obj->$command };
+	} else {
+	    @r = eval { $has_args ? $obj->$command(@$args)
+			          : $obj->$command };
+	}
+	if ($@) {
+	    return $self->error_response($@);
+	}
+	if ($ctx >= 2) {
+	    return $self->list_response(@r);
+	} elsif ($ctx == 1 && defined $r[0]) {
+	    return $self->scalar_response($r[0]);
+	} else {
+	    return $self->void_response;
+	}
     }
 
     elsif ($topic eq 'OVERLOAD') {
