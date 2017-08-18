@@ -8,15 +8,15 @@ our $VERSION = '0.10';
 
 sub isProxyRef {
     my ($pkg) = @_;
-    return $pkg eq 'Patro::N1' || $pkg eq 'Patro::N2';
+    return $pkg eq 'Patro::N1' || $pkg eq 'Patro::N2' || $pkg eq 'Patro::N3';
 }
 
 sub handle {
     my ($proxy) = @_;
-    if (CORE::ref($proxy) eq 'Patro::N1') {
-	return ${$proxy};
-    } else {
+    if (CORE::ref($proxy) eq 'Patro::N2') {
 	return $proxy;
+    } else {
+	return ${$proxy};
     }
 }
 
@@ -65,6 +65,22 @@ sub getproxy {
 	tie my %h, 'Patro::Tie::HASH', $proxy;
 	$proxy->{hash} = \%h;
 	return bless \$proxy, 'Patro::N1';
+    }
+
+    if ($proxy->{reftype} eq 'CODE') {
+	require Patro::N3;
+	$proxy->{sub} = sub {
+	    return proxy_request( $proxy,
+	        {
+		    context => defined(wantarray) ? 1 + wantarray : 0,
+		    topic => 'CODE',
+		    has_args => @_ > 0,
+		    args => [ @_ ],
+		    command => 'invoke',
+		    id => $proxy->{id}
+		} );
+	};
+	return bless \$proxy, 'Patro::N3';
     }
 
     croak "unsupported remote object reftype '$objdata->{reftype}'";

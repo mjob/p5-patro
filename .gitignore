@@ -37,3 +37,6 @@ inc/
 # Patro-specific
 t/PatroNetworkOK.pm
 notes
+spike-*
+_Inline
+FQ

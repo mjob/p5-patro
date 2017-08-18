@@ -33,6 +33,13 @@ sub import {
 		}
 	    };
 	    push @EXPORT, 'ok_threaded';
+	} elsif ($tag eq ':code') {
+	    require Patro::CODE::Shareable;
+	    Patro::CODE::Shareable->import;
+	    Patro::CODE::Shareable->export_to_level(1, 'Patro::CODE::Shareable',
+						    'share','shared_clone');
+	    *Patro::Server::shared_clone = *shared_clone;
+	    *Patro::Server::share = *share;
 	}
     }
     Patro->export_to_level(1, 'Patro', @args, @EXPORT);

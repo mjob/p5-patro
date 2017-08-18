@@ -61,7 +61,20 @@ sub new {
     my @store;
 
     if ($threads_avail) {
-	$_ = shared_clone($_) for @_;
+	for (@_) {
+	    if (CORE::ref($_) eq 'CODE') {
+		require Patro::CODE::Shareable;
+	    }
+	    local $threads::shared::clone_warn = undef;
+	    # hmmmm. shared_clone doesn't work on, say, a dispatch table
+	    # that contains code references under a HASH or ARRAY?
+	    eval { $_ = shared_clone($_) };
+	    if ($@ =~ /CODE/) {
+		require Patro::CODE::Shareable;
+		$threads::shared::clone_warn = 0;
+		$_ = shared_clone($_);
+	    }
+	}
     }
     foreach my $o (@_) {
 	my ($num,$str);
@@ -74,10 +87,13 @@ sub new {
 	}
 	$obj->{$num} = $o;
 	my $reftype = Scalar::Util::reftype($o);
-	my $ref = ref($o);
+	my $ref = CORE::ref($o);
+	if ($ref eq 'Patro::CODE::Shareable') {
+	    $ref = $reftype = 'CODE';
+	}
 	my $store = {
-	    ref => CORE::ref($o),
-	    reftype => Scalar::Util::reftype($o),
+	    ref => $ref,
+	    reftype => $reftype,
 	    id => $num
 	};
 	if (overload::Overloaded($o)) {
@@ -256,7 +272,6 @@ sub watch_for_finishers {
 	my $n1 = threads->list(threads::all());
 	my $n2 = threads->list(threads::running());
 	my @joinable = threads->list(threads::joinable());
-#	::xdiag("thread status $n/$n1/$n2/" . scalar(@joinable));
 	if (@joinable) {
 	    foreach my $subthread  (@joinable) {
 		my ($i) = grep {
@@ -424,12 +439,32 @@ sub process_request {
 	}
     }
 
+    elsif ($topic eq 'CODE') {
+	my $sub = $self->{obj}{$id};
+	my @r;
+	if ($ctx < 2) {
+	    @r = scalar eval { $has_args ? $sub->(@$args) : $sub->() };
+	} else {
+	    @r = eval { $has_args ? $sub->(@$args) : $sub->() };
+	}
+	if ($@) {
+	    return $self->error_response($@);
+	}
+	if ($ctx >= 2) {
+	    return $self->list_response(@r);
+	} elsif ($ctx == 1 && defined($r[0])) {
+	    return $self->scalar_response($r[0]);
+	} else {
+	    return $self->void_response;
+	}
+    }
+
     elsif ($topic eq 'OVERLOAD') {
 	return $self->error_response("topic:'OVERLOAD' not supported yet");
     }
 
     else {
-	return $self->error_reponse(
+	return $self->error_response(
 	    __PACKAGE__,": unrecognized topic '$topic'");
     }
 }
@@ -442,6 +477,8 @@ sub process_request_HASH {
 	$obj->{$key} = $val;
 	return $self->scalar_response($old_val);
     } elsif ($command eq 'FETCH') {
+	my $key = $args->[0];
+	my $val = $obj->{$key};
 	return $self->scalar_response( $obj->{$args->[0]} );
     } elsif ($command eq 'DELETE') {
 	return $self->scalar_response( delete $obj->{$args->[0]} );
@@ -503,7 +540,8 @@ sub _share {
 	return @_;
     } else {
 	return map {
-	    CORE::ref($_) ? shared_clone($_) : $_
+	    CORE::ref($_) eq 'CODE' ? $_
+		: CORE::ref($_) ? shared_clone($_) : $_;
 	} @_
     }
 }
@@ -533,8 +571,16 @@ sub patrol {
 
     if (!$self->{obj}{$id}) {
 	$self->{obj}{$id} = $obj;
+	my $ref = ref($obj);
+	my $reftype;
+	if ($ref eq 'Patro::CODE::Shareable') {
+	    $ref = 'CODE';
+	    $reftype = 'CODE';
+	} else {
+	    $reftype = reftype($obj);
+	}
 	$resp->{meta}{$id} = {
-	    id => $id, ref => ref($obj), reftype => reftype($obj)
+	    id => $id, ref => $ref, reftype => $reftype
 	};
 	if (overload::Overloaded($obj)) {
 	    $resp->{meta}{overload} = _overloads($obj);
