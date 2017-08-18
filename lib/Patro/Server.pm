@@ -322,7 +322,7 @@ sub request_response_loop {
     $| = 1;
     select $fh0;
 
-    while (my $req = <$client>) {
+    while (my $req = readline($client)) {
 	next unless $req =~ /\S/;
 	my $resp = $self->process_request($req);
 	$resp = $self->serialize_response($resp);
@@ -567,6 +567,11 @@ sub process_request_SCALAR {
 sub patrol {
     my ($self,$resp,$obj) = @_;
     return $obj unless ref($obj);
+
+    if (ref($obj) eq 'CODE') {
+	$obj = Patro::CODE::Shareable->new($obj);
+    }
+
     my $id = do {
 	no overloading;
 	0 + $obj;

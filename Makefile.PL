@@ -4,7 +4,7 @@ use ExtUtils::MakeMaker;
 use 5.010001;
 
 our %RECOMMENDED = ( 'Sys::HostAddr' => 0 );
-our %REQUIRED;
+our %REQUIRED = ( 'Devel::GlobalDestruction' => 0 );;
 our @NO_INDEX = ();
 
 our %META_MERGE

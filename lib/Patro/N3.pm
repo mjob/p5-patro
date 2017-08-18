@@ -1,4 +1,5 @@
 package Patro::N3;
+use Devel::GlobalDestruction;
 use strict;
 use warnings;
 
@@ -14,6 +15,7 @@ use overload
 
 sub DESTROY {
     my $self = shift;
+    return if in_global_destruction();
     if ($$self->{_DESTROY}++) {
 	return;
     }

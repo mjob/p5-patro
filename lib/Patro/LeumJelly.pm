@@ -101,8 +101,6 @@ sub proxy_request {
 	$request->{id} = $proxy->{id};
     }
 
-    ### unwind_args($request);
-
     my $sreq = serialize($request);
     my $resp;
     if ($proxy->{_DESTROY}) {
