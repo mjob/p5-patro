@@ -64,6 +64,7 @@ sub new {
 	for (@_) {
 	    if (CORE::ref($_) eq 'CODE') {
 		require Patro::CODE::Shareable;
+		Patro::CODE::Shareable->import;
 	    }
 	    local $threads::shared::clone_warn = undef;
 	    # hmmmm. shared_clone doesn't work on, say, a dispatch table
@@ -97,7 +98,9 @@ sub new {
 	    id => $num
 	};
 	if (overload::Overloaded($o)) {
-	    $store->{overload} = _overloads($o);
+	    if ($ref ne 'CODE') {
+		$store->{overload} = _overloads($o);
+	    }
 	}
 	push @store, $store;
     }
@@ -178,8 +181,8 @@ sub config {
 	host => $self->{meta}{host},
 	port => $self->{meta}{port},
 	store => $self->{store},
-	style => $self->{meta}{style}
-	
+	style => $self->{meta}{style},
+	version => $Patro::Server::VERSION
     };
     return $config_data;
 }

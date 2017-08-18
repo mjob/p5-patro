@@ -121,7 +121,7 @@ $make_shared_with_code = sub {
     return $copy;
 };
 
-INIT {
+{
     no warnings 'redefine';
     $share_orig = \&threads::shared::share;
     *threads::shared::shared_clone = \&shared_clone;
