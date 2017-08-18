@@ -53,8 +53,8 @@ if ($THREADED) {
     is_deeply($r0,$r1, "local and remote object match after function call");
 }
 is($r1->[4],$r1->get(4), 'remote function call ok');
-is($r0->get(-2),$r1->get(-2),
-   'local function call same as remote function call');
+ok_threaded($r0->get(-2) == $r1->get(-2),
+	    'local function call same as remote function call');
 
 my @x = $r1->context_dependent;
 my $x = $r1->context_dependent;
