@@ -13,6 +13,11 @@ if (defined $ENV{PATRO_THREADS}) {
     $threads_avail = $ENV{PATRO_THREADS};
 }
 
+*sxdiag = sub {};
+if ($ENV{PATRO_SERVER_DEBUG}) {
+    *sxdiag = *::xdiag;
+}
+
 our $VERSION = '0.10';
 our @SERVERS :shared;
 our %OPTS = ( # XXX - needs documentation
@@ -324,8 +329,11 @@ sub request_response_loop {
 
     while (my $req = readline($client)) {
 	next unless $req =~ /\S/;
+	sxdiag("server: got request '$req'");
 	my $resp = $self->process_request($req);
+	sxdiag("server: response to request is ",$resp);
 	$resp = $self->serialize_response($resp);
+	sxdiag("server: serialized response to request is ",$resp);
 	print {$client} $resp,"\n";
 	last if $Patro::Server::disconnect;
     }
@@ -361,6 +369,19 @@ sub process_request {
 
     if (!defined $topic) {
 	Carp::confess "process_request: bad topic in request '$_[1]'";
+    }
+    if ($request->{has_args}) {
+	$args = [ map {
+	    if (ref($_) eq '.Patroon') {
+		if (!defined $$_) {
+		    croak "server: argument $_ in $topic request refers to ",
+			"undefined reference";
+		}
+#		::xdiag("server: arg $$_ from client is .Patroon");
+		$self->{obj}{$$_}
+	    } else {
+		$_
+	    }  } @{$request->{args}} ];
     }
 
     if ($topic eq 'META') {
@@ -406,7 +427,7 @@ sub process_request {
 	    return $self->error_response("Not an ARRAY reference");
 	}
 	my $resp = eval { $self->process_request_ARRAY(
-			      $obj,$command,$has_args,$args) };
+			      $obj,$command,$ctx,$has_args,$args) };
 	return $@ ? $self->error_response($@) : $resp;
     }
 
@@ -463,13 +484,57 @@ sub process_request {
     }
 
     elsif ($topic eq 'OVERLOAD') {
-	return $self->error_response("topic:'OVERLOAD' not supported yet");
+	my $obj = $self->{obj}{$id};
+	return $self->process_request_OVERLOAD($obj,$command,$args,$ctx);
     }
 
     else {
 	return $self->error_response(
 	    __PACKAGE__,": unrecognized topic '$topic'");
     }
+}
+
+sub process_request_OVERLOAD {
+    my ($self,$x,$op,$args,$context) = @_;
+    my ($y,$swap) = @$args;
+    if ($swap) {
+	($x,$y) = ($y,$x);
+    }
+    local $@ = '';
+    my $z;
+    if ($op =~ /[&|~^][.]=?/) {
+        $op =~ s/\.//;
+    }
+    if ($op eq '-X') {
+        $z = eval "-$y \$x";
+    } elsif ($op eq 'neg') {
+        $z = eval { -$x };
+    } elsif ($op eq '!' || $op eq '~' || $op eq '++' || $op eq '--') {
+        $z = eval "$op\$x";
+    } elsif ($op eq 'qr') {
+        $z = eval { qr/$x/ };
+    } elsif ($op eq 'atan2') {
+        $z = eval { atan2($x,$y) };
+   } elsif ($op eq 'cos' || $op eq 'sin' || $op eq 'exp' || $op eq 'abs' ||
+             $op eq 'int' || $op eq 'sqrt' || $op eq 'log') {
+        $z = eval "$op(\$x)";
+    } elsif ($op eq 'bool') {
+        $z = eval { $x ? 1 : 0 };  # this isn't right
+    } elsif ($op eq '0+') {
+        $z = eval "0 + \$x"; # this isn't right, either
+    } elsif ($op eq '""') {
+        $z = eval { "$x" };
+    } elsif ($op eq '<>') {
+        # always scalar context readline
+        $z = eval { readline($x) };
+    } else {  # binary operator
+        $z = eval "\$x $op \$y";
+    }
+    if ($@) {
+	return $self->error_response($@);
+    }
+    $z = shared_clone($z);
+    return $self->scalar_response($z);
 }
 
 sub process_request_HASH {
@@ -505,7 +570,7 @@ sub process_request_HASH {
 }
 
 sub process_request_ARRAY {
-    my ($self,$obj,$command,$has_args,$args) = @_;
+    my ($self,$obj,$command,$context,$has_args,$args) = @_;
     if ($command eq 'STORE') {
 	my ($index,$val) = @$args;
 	return $self->scalar_response( $obj->[$index] = $val );
@@ -518,10 +583,41 @@ sub process_request_ARRAY {
 	return $self->scalar_response($n+1);
     } elsif ($command eq 'SPLICE') {
 	my ($off,$len,@list) = @$args;
+	if ($off < 0) {
+	    $off += @$obj;
+	    if ($off < 0) {
+		croak "Modification of non-createable array value attempted, ",
+		    "subscript $off";
+	    }
+	}
+
 	if ($len eq 'undef') {
 	    $len = @{$obj} - $off;
 	}
-	my @val = splice @{$obj},$off,$len,@list;
+	if ($len < 0) {
+	    $len += @{$obj} - $off;
+	    if ($len < 0) {
+		$len = 0;
+	    }
+	}
+
+	my @val;
+	if (threads::shared::is_shared($obj)) {
+	    # "Splice not implemented for shared arrays" in threads::shared.
+	    # This is a workaround
+	    @val = @{$obj}[$off .. $off+$len-1];
+	    my @tmp = @{$obj}[0..$off-1];
+	    push @tmp, @list;
+	    push @tmp, @{$obj}[$off+$len..$#{$obj}];
+	    @$obj = @tmp;
+	} else {
+	    @val = splice @{$obj},$off,$len,@list;
+	}
+
+	# this is the only ARRAY function that doesn't assume scalar context
+	if ($context == 1) {
+	    return $self->scalar_response(@val > 0 ? $val[-1] : undef);
+	}	
 	return $self->list_response(@val);
     } elsif ($command eq 'PUSH') {
 	my $n = push @{$obj}, _share(@$args);
@@ -566,18 +662,22 @@ sub process_request_SCALAR {
 # object id.
 sub patrol {
     my ($self,$resp,$obj) = @_;
+    sxdiag("patrol: called on: $obj");
     return $obj unless ref($obj);
 
     if (ref($obj) eq 'CODE') {
 	$obj = Patro::CODE::Shareable->new($obj);
+	sxdiag("patrol: coderef converted");
     }
 
     my $id = do {
 	no overloading;
 	0 + $obj;
     };
+    sxdiag("patrol: object id is $id");
 
     if (!$self->{obj}{$id}) {
+	sxdiag("patrol: $id is a new id");
 	$self->{obj}{$id} = $obj;
 	my $ref = ref($obj);
 	my $reftype;
@@ -587,12 +687,15 @@ sub patrol {
 	} else {
 	    $reftype = reftype($obj);
 	}
+	sxdiag("patrol: ref types for $id are $ref,$reftype");
 	$resp->{meta}{$id} = {
 	    id => $id, ref => $ref, reftype => $reftype
 	};
 	if (overload::Overloaded($obj)) {
-	    $resp->{meta}{overload} = _overloads($obj);
+	    $resp->{meta}{$id}{overload} = _overloads($obj);
 	}
+    } else {
+	sxdiag("id $id has been seen before");
     }
     return \$id;
 }

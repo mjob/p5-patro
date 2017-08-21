@@ -86,7 +86,7 @@ sub Patro::Tie::ARRAY::__ {
 sub Patro::Tie::ARRAY::FETCH { return shift->__('FETCH',1,@_) }
 sub Patro::Tie::ARRAY::STORE { return shift->__('STORE',0,@_) }
 sub Patro::Tie::ARRAY::FETCHSIZE { return shift->__('FETCHSIZE',1) }
-sub Patro::Tie::ARRAY::STORESIZE { return shuft->__('STORESIZE',1,@_) }
+sub Patro::Tie::ARRAY::STORESIZE { return shift->__('STORESIZE',1,@_) }
 sub Patro::Tie::ARRAY::DELETE    { return shift->__('DELETE',1,@_) }
 sub Patro::Tie::ARRAY::CLEAR     { return shift->__('CLEAR',0) }
 sub Patro::Tie::ARRAY::EXISTS    { return shift->__('EXISTS',1,@_) }
@@ -98,7 +98,7 @@ sub Patro::Tie::ARRAY::SPLICE {
     my $tied = shift;
     my $off = @_ ? shift : 0;
     my $len = @_ ? shift : 'undef';
-    return $tied->__('SPLICE',2,$off,$len,@_);
+    return $tied->__('SPLICE',wantarray ? 2:1,$off,$len,@_);
 }
 
 ############################################################

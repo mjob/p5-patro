@@ -39,7 +39,8 @@ sub deserialize {
 # object metadata (containing id, ref, reftype values) and client.
 sub getproxy {
     my ($objdata,$client) = @_;
-    croak unless $objdata->{id} && $objdata->{ref} && $objdata->{reftype};
+    croak "getproxy: insufficient metadata to construct proxy"
+	unless $objdata->{id} && $objdata->{ref} && $objdata->{reftype};
     my $proxy = { %$objdata };
     if ($objdata->{overload}) {
 	$proxy->{overloads} = { map {; $_ => 1 } @{$objdata->{overload}} };
@@ -86,10 +87,6 @@ sub getproxy {
     croak "unsupported remote object reftype '$objdata->{reftype}'";
 }
 
-sub overload_handler {
-    return $_[0];
-}
-
 # make a request through a Patro::N's client, return the response
 sub proxy_request {
     my ($proxy,$request) = @_;
@@ -99,6 +96,18 @@ sub proxy_request {
     }
     if (!defined $request->{id}) {
 	$request->{id} = $proxy->{id};
+    }
+
+    if ($request->{has_args}) {
+	# if there are any Patro'N items in $request->{args},
+	# we should convert it to ... what?
+	foreach my $arg (@{$request->{args}}) {
+	    if (isProxyRef(ref($arg))) {
+		my $id = handle($arg)->{id};
+#		::xdiag("client: arg $id as .Patroon");
+		$arg = bless \$id, '.Patroon';
+	    }
+	}
     }
 
     my $sreq = serialize($request);
@@ -167,12 +176,78 @@ sub depatrol {
 	return $obj;
     }
     my $id = $$obj;
-    if (!$meta->{$id}) {
-	warn "depatrol: reference $obj is not referred to in meta";
-	return $obj;
+    if ($meta->{$id}) {
+	return getproxy($meta->{$id}, $client);
+    } elsif (defined $client->{proxies}{$id}) {
+	return $client->{proxies}{$id};
     }
-    return getproxy($meta->{$id}, $client);
+    warn "depatrol: reference $obj is not referred to in meta";
+    return $obj;
 }
+
+# overload handling for Patro::N1 and Patro::N2
+
+my %numeric_ops = map { $_ => 1 }
+qw# + - * / % ** << >> += -= *= /= %= **= <<= >>= <=> < <= > >= == != ^ ^=
+    & &= | |= neg ! not ~ ++ -- atan2 cos sin exp abs log sqrt int 0+ #;
+
+# non-numeric ops:
+#  x . x= .= cmp lt le gt ge eq ne ^. ^.= ~. "" qr -X ~~
+
+sub overload_handler {
+    my ($ref, $y, $swap, $op) = @_;
+    my $handle = handle($ref);
+    my $overloads = $handle->{overloads};
+    if ($overloads && $overloads->{$op}) {
+	# operation is overloaded in the remote object.
+	# ask the server to compute the operation result
+
+#       ::xdiag("overload_handler forwarding '$op' op for $handle->{id}");
+	return proxy_request( $handle,
+	    { id => $handle->{id},
+	      topic => 'OVERLOAD',
+	      command => $op,
+	      has_args => 1,
+	      args => [$y, $swap] } );
+    }
+
+    # operation is not overloaded on the server.
+    # Do something sensible.
+    return 1 if $op eq 'bool';
+    return if $op eq '<>';  # nothing sensible to do for this op
+    my $str = overload::StrVal($ref);
+    if ($numeric_ops{$op}) {
+	my $num = hex($str =~ /x(\w+)/);
+	return $num if $op eq '0+';
+	return cos($num) if $op eq 'cos';
+	return sin($num) if $op eq 'sin';
+	return exp($num) if $op eq 'exp';
+	return log($num) if $op eq 'log';
+	return sqrt($num) if $op eq 'sqrt';
+	return int($num) if $op eq 'int';
+	return abs($num) if $op eq 'abs';
+	return -$num if $op eq 'neg';
+	return $num+1 if $op eq '++';
+	return $num-1 if $op eq '--';
+	return !$num if $op eq '!' || $op eq 'not';
+	return ~$num if $op eq '~';
+
+	# binary op
+	($num,$y)=($y,$num) if $swap;
+	return atan2($num,$y) if $op eq 'atan2';
+	return $ref if $op eq '=' || $op =~ /^[^<=>]=/;
+	return eval "$num $op \$y";
+    }
+
+    # string operation
+    return $str if $op eq '""';
+    return $ref if $op eq '=' || $op =~ /^[^<=>]=/;
+    return qr/$str/ if $op eq 'qr';
+    return eval "-$y \$str" if $op eq '-X';
+    ($str,$y) = ($y,$str) if $swap;
+    return eval "\$str $op \$y";
+}
+
 
 1;
 
