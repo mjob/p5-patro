@@ -33,15 +33,19 @@ sub import {
 		}
 	    };
 	    *xjoin = sub {
-		my $h;
 		join(",", map { my $r = $_;
 				my $rt = Patro::reftype($_) || "";
 				$rt eq 'ARRAY' ? "[" . xjoin(@$r) . "]" :
 				$rt eq 'HASH' ? do {
-			"{".xjoin(map{"$_:'".$h->{$_}."'"}sort keys %$r)."}" 
+			"{".xjoin(map{"$_:'".$r->{$_}."'"}sort keys %$r)."}" 
 				} : $_ } @_)
 	    };
 	    push @EXPORT, 'ok_threaded', 'xjoin';
+	    eval q~END {
+	        if ($Patro::Server::threads_avail) {
+	            $_->detach for threads->list(threads::running);
+	        }
+	    }~;
 	} elsif ($tag eq ':code') {
 	    require Patro::CODE::Shareable;
 	    Patro::CODE::Shareable->import;
