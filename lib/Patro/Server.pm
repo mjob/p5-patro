@@ -8,9 +8,9 @@ use Scalar::Util 'reftype';
 use POSIX ':sys_wait_h';
 require overload;
 
-our $VERSION = '0.10';
 our $threads_avail = eval "use threads; use threads::shared; 1";
 if (defined $ENV{PATRO_THREADS}) {
+    no warnings 'redefine';
     $threads_avail = $ENV{PATRO_THREADS};
     *threads::shared::tie::SPLICE = \&threads_shared_tie_SPLICE;
 }
@@ -664,7 +664,7 @@ sub process_request_SCALAR {
 # object id.
 sub patrol {
     my ($self,$resp,$obj) = @_;
-    sxdiag("patrol: called on: $obj");
+    sxdiag("patrol: called on: ",defined($obj) ? "$obj" : "<undef>");
     return $obj unless ref($obj);
 
     if (ref($obj) eq 'CODE') {
