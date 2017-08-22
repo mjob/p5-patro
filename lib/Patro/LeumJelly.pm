@@ -177,11 +177,11 @@ sub depatrol {
     }
     my $id = $$obj;
     if ($meta->{$id}) {
-	return getproxy($meta->{$id}, $client);
+	return $client->{proxies}{$id} = getproxy($meta->{$id}, $client);
     } elsif (defined $client->{proxies}{$id}) {
 	return $client->{proxies}{$id};
     }
-    warn "depatrol: reference $obj is not referred to in meta";
+    warn "depatrol: reference $id $obj is not referred to in meta";
     return $obj;
 }
 

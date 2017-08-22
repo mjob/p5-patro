@@ -678,10 +678,8 @@ sub patrol {
 	no overloading;
 	0 + $obj;
     };
-    sxdiag("patrol: object id is $id");
 
     if (!$self->{obj}{$id}) {
-	sxdiag("patrol: $id is a new id");
 	$self->{obj}{$id} = $obj;
 	my $ref = ref($obj);
 	my $reftype;
@@ -698,6 +696,7 @@ sub patrol {
 	if (overload::Overloaded($obj)) {
 	    $resp->{meta}{$id}{overload} = _overloads($obj);
 	}
+	sxdiag("new response meta: ",$resp->{meta}{$id});
     } else {
 	sxdiag("id $id has been seen before");
     }
