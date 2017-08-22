@@ -122,6 +122,7 @@ sub new {
     return $self;
 }
 
+
 sub start_server {
     my $self = shift;
     my $meta = $self->{meta};
@@ -146,7 +147,6 @@ sub start_server {
 	$self->{meta}{server_pid} = $$;
 	$self->{meta}{server_tid} = $server_thread->tid;
 	#$server_thread->detach;
-
     } else {
 	my $pid = CORE::fork();
 	if (!defined($pid)) {
@@ -631,6 +631,8 @@ sub process_request_ARRAY {
 	return $self->scalar_response(pop @$obj);
     } elsif ($command eq 'SHIFT') {
 	return $self->scalar_response(shift @$obj);
+    } elsif ($command eq 'EXISTS') {
+	return $self->scalar_response(exists $obj->[$args->[0]]);
     }
 
     die "tied ARRAY function '$command' not recognized";
