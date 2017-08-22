@@ -4,6 +4,9 @@ use Patro ':test';
 use 5.012;
 use Scalar::Util 'reftype';
 
+# Test::More::is_deeply($x,$y) doesn't work with proxies.
+# Use  Test::More::is(xjoin($x),xjoin($y)) instead
+
 my $r0 = ArrayThing->new( 1, 2, 3, 4 );
 
 ok($r0 && ref($r0) eq 'ArrayThing', 'created remote var');
@@ -47,10 +50,10 @@ is(CORE::ref($r6), 'Patro::N1', 'proxy handle for nested remote obj');
 is(Patro::ref($r6), 'ARRAY', 'got remote ref type');
 
 ok(18 == $r1->reverse, 'called method on remote obj');
-is_deeply($r1, [[15,16,17],4,19,2,31,30,29,28,27,26,25],
-	  'reverse operation ok');
+is(xjoin($r1), "[[15,16,17],4,19,2,31,30,29,28,27,26,25]",
+   'reverse operation ok');
 if ($THREADED) {
-    is_deeply($r0,$r1, "local and remote object match after function call");
+    is(xjoin($r0),xjoin($r1),"local and remote object match after function call");
 }
 is($r1->[4],$r1->get(4), 'remote function call ok');
 ok_threaded($r0->get(-2) == $r1->get(-2),
@@ -59,7 +62,7 @@ ok_threaded($r0->get(-2) == $r1->get(-2),
 my @x = $r1->context_dependent;
 my $x = $r1->context_dependent;
 is($x, $r1->get(1), 'context respected in scalar context');
-is_deeply(\@x, [5,6,7], 'context respected in list context');
+is(xjoin(\@x),xjoin([5,6,7]), 'context respected in list context');
 
 done_testing;
 

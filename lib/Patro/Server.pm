@@ -8,9 +8,11 @@ use Scalar::Util 'reftype';
 use POSIX ':sys_wait_h';
 require overload;
 
+our $VERSION = '0.10';
 our $threads_avail = eval "use threads; use threads::shared; 1";
 if (defined $ENV{PATRO_THREADS}) {
     $threads_avail = $ENV{PATRO_THREADS};
+    *threads::shared::tie::SPLICE = \&threads_shared_tie_SPLICE;
 }
 
 *sxdiag = sub {};
@@ -734,4 +736,104 @@ sub TEST_MODE {
     }
 }
 
+
+
+no warnings 'redefine';
+
+# core  threads::shared  has a limitation in that the  splice  function
+# can not be used on shared arrays. We can hijack  threads::shared::tie::SPLICE
+# with this function, that performs the splice operation without using
+# the splice function, to work around this limitation.
+# This is not a very efficient implementation, but it is better than
+# a sharp stick in the eye.
+#
+sub threads_shared_tie_SPLICE {
+    use Data::Dumper;
+    use B;
+
+    my ($tied,$off,$len,@list) = @_;
+    my @bav = B::AV::ARRAY($tied);
+    my $arraylen = 0 + @bav;
+    if ($off < 0) {
+	$off += $arraylen;
+	if ($off < 0) {
+	    croak "Modification of non-createable array value attempated, ",
+		"subscript $_[1]";
+	}
+    }
+    if (!defined $len || $len eq 'undef') {
+	$len = $arraylen - $off;
+    }
+    if ($len < 0) {
+	$len += $arraylen - $off;
+	if ($len < 0) {
+	    $len = 0;
+	}
+    }
+
+    my (@tmp, @val);
+    for (my $i=0; $i<$off; $i++) {
+	my $fetched = $bav[$i]->object_2svref;
+	push @tmp, $$fetched;
+    }
+    for (my $i=0; $i<$len; $i++) {
+	my $fetched = $bav[$i+$off]->object_2svref;
+	push @val, $$fetched;
+    }
+    push @tmp, @list;
+    for (my $i=$off+$len; $i<$arraylen; $i++) {
+	my $fetched = $bav[$i]->object_2svref;
+	push @tmp, $$fetched;
+    }
+    # is there a better way to clear the array?
+    $tied->STORESIZE($#tmp + 1);
+    $tied->POP for 0..$arraylen;
+
+    $tied->PUSH(@tmp);
+
+    return @val;
+}
+
 1;
+
+=head1 NAME
+
+Patro::Server - remote object server for Patro
+
+=head1 VERSION
+
+0.10
+
+=head1 DESCRIPTION
+
+A server class for making references available to proxy clients
+in the L<Patro> distribution.
+The server handles requests for any references that are being served,
+manipulates references on the server, and returns the results of
+operations to the proxy objects on the clients.
+
+=head1 LICENSE AND COPYRIGHT
+
+MIT License
+
+Copyright (c) 2017, Marty O'Brien
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+=cut

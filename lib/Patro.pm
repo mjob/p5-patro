@@ -32,7 +32,16 @@ sub import {
 		       "skip test that requires threaded server");
 		}
 	    };
-	    push @EXPORT, 'ok_threaded';
+	    *xjoin = sub {
+		my $h;
+		join(",", map { my $r = $_;
+				my $rt = Patro::reftype($_) || "";
+				$rt eq 'ARRAY' ? "[" . xjoin(@$r) . "]" :
+				$rt eq 'HASH' ? do {
+			"{".xjoin(map{"$_:'".$h->{$_}."'"}sort keys %$r)."}" 
+				} : $_ } @_)
+	    };
+	    push @EXPORT, 'ok_threaded', 'xjoin';
 	} elsif ($tag eq ':code') {
 	    require Patro::CODE::Shareable;
 	    Patro::CODE::Shareable->import;
@@ -260,8 +269,13 @@ proxies to the shared references.
 
     PROXIES = getProxies(CONFIG)
 
-Connects to a server on another machine, specified in the `CONFIG`
+Connects to a server on another machine, specified in the C<CONFIG>
 string, and returns proxies to the list of references that are served.
+In scalar context, returns a proxy to the first reference that is
+served.
+
+See the L<"PROXIES"> section below for what you can do with the output
+of this function.
 
 =head2 ref
 
@@ -288,6 +302,23 @@ Returns the IPC client object used by the given proxy to communicate
 with the remote object server. The client object contains information
 about how to communicate with the server and other connection 
 configuration.
+
+=head1 PROXIES
+
+Proxy references, as returned by the L<"getProxies"> function above,
+or sometimes returned in other calls to the server, are designed
+to look and feel as much as possible as the real references on the
+remote server that they provide access to, so any operation or
+expression with the proxy on the local machine should evaluate
+to the same value(s) as the same operation or expression with the
+real object/reference on the remote server. 
+When the server if using threads and is sharing the served
+objects between threads, an update to the
+proxy object will affect the remote object, and vice versa.
+
+=cut
+
+# TODO: lots of examples
 
 =head1 ENVIRONMENT
 

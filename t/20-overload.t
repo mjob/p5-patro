@@ -11,10 +11,11 @@ if (!eval "use Math::BigInt;1") {
 
 my $b0 = Math::BigInt->new(42);
 my $b1 = Math::BigInt->new(19);
-my $cfg = patronize($b0,$b1);
+my $b2 = Math::BigInt->new(4);
+my $cfg = patronize($b0,$b1,$b2);
 ok($cfg, "got config for two Math::BigInt's");
    
-my ($p0,$p1) = Patro->new($cfg)->getProxies;
+my ($p0,$p1,$p2) = Patro->new($cfg)->getProxies;
 ok($p0 && $p1, "got proxies");
 
 # !!! ok($p0+$p1==61,...) works, but
@@ -24,9 +25,9 @@ is("" . ($p0 * $p1), 42 * 19, "proxy operation");
 ok($p0 * $p1 == 42 * 19, 'proxy operation');
 ok($p0 / $p1 == int(42/19), 'operation on proxy integers respects int');
 
-# this test doesn't work on threaded server - "Splice not implemented for
-#    shared arrays ..."
-my $p2 = eval { $p1->bfac };
-is($p2, $b1->bfac, 'proxy method call');
+my $b3 = 0 + $b2;
+my $p3 = eval { $p2->bfac };
+is($@, '', 'proxy method call did not throw exception');
+is($p3, $b3->bfac, 'proxy method call');
 
 done_testing;
