@@ -32,6 +32,7 @@ sub import {
 		       "skip test that requires threaded server");
 		}
 	    };
+	    # a poor man's Data::Dumper, but works for Patro::N objects.
 	    *xjoin = sub {
 		join(",", map { my $r = $_;
 				my $rt = Patro::reftype($_) || "";
@@ -320,9 +321,79 @@ When the server if using threads and is sharing the served
 objects between threads, an update to the
 proxy object will affect the remote object, and vice versa.
 
-=cut
+=head2 Example 1: network file synchronization
 
-# TODO: lots of examples
+Network file systems are notoriously flaky when it comes to
+synchronizing files that are being written to by processes on
+many different hosts [citation needed]. C<Patro> provides a
+workaround, in that every machine can hold to a proxy to an object
+that writes to a file, with the object running on a single machine.
+
+    # master
+    package SyncWriter;
+    use Fcntl qw(:flock SEEK_END);
+    sub new {
+        my ($pkg,$filename) = @_;
+        open my $fh, '>', $filename;
+        bless { fh => $fh }, $pkg;
+    }
+    sub print {
+        my $self = shift;
+        flock $self->{fh}, LOCK_EX;
+        seek $self->{fh}, 0, SEEK_END;
+        print {$self->{fh}} @_;
+        flock $self->{fh}, LOCK_UN;
+    }
+    sub printf { ... }
+
+    use Patro;
+    my $writer = SyncWriter->new("file.log");
+    my $cfg = patronize($writer);
+    open my $fh,'>','/network/accessible/file';
+    print $fh $cfg;
+    close $fh;
+    ...
+
+    # slaves
+    use Patro;
+    open my $fh, '<', '/network/accessible/file';
+    my $cfg = <$fh>;
+    close $fh;
+    my $writer = Patro->new($cfg)->getProxies;
+    ...
+    # $writer->print with a proxy $writer
+    # invokes $writer->print on the host. Since all
+    # the file operations are done on a single machine,
+    # there are no network synchronization issues
+    $writer->print("a log message\n");
+    ...
+
+=head2 Example 2: Distributed queue
+
+A program that distributes tasks to several threads or several
+child processes can be extended to distribute tasks to
+several machines.
+
+    # master
+    use Patro;
+    my $queue = [ 'job 1', 'job 2', ... ];
+    open my $fh, '>', '/network/accessible/file';
+    print $fh patronize($queue);
+    close $fh;
+    ...
+
+    # slaves
+    use Patro;
+    open my $fh, '<', '/network/accessible/file';
+    my $queue = Patro->new(<$fh>)->getProxies;
+    close $fh;
+
+    while (my $task = shift @$queue) {
+        ... do task ...
+    }
+
+(This example will not work without threads. For a more robust
+network-safe queue that will run with forks, see L<Forks::Queue>)
 
 =head1 ENVIRONMENT
 
