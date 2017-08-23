@@ -2,9 +2,12 @@ use Test::More;
 use strict;
 use warnings;
 use Data::Dumper;
-use threads;
-use threads::shared;
-use Patro::CODE::Shareable;   # load after threads::shared
+if (!eval "use threads; use threads::shared; 1") {
+    ok("SKIP: no threads");
+    done_testing;
+    exit;
+}
+require Patro::CODE::Shareable;   # load after threads::shared
 
 
 sub sub1 { 42 }

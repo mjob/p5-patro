@@ -23,13 +23,6 @@ is($proxy->(4,3), 7, 'proxy code access');
 
 done_testing;
 
-END {
-    if (0 && $$ == $main_pid) {
-	$proxy->DESTROY;
-	undef $proxy;
-	sleep 10;
-    }
-}
 
 # TODO:
 #  set a scalar-type object and perform method calls

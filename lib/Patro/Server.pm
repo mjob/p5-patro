@@ -604,7 +604,7 @@ sub process_request_ARRAY {
 	}
 
 	my @val;
-	if (threads::shared::is_shared($obj)) {
+	if ($threads::threads && threads::shared::is_shared($obj)) {
 	    # "Splice not implemented for shared arrays" in threads::shared.
 	    # This is a workaround
 	    @val = @{$obj}[$off .. $off+$len-1];
