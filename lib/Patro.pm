@@ -395,6 +395,33 @@ several machines.
 (This example will not work without threads. For a more robust
 network-safe queue that will run with forks, see L<Forks::Queue>)
 
+=head2 Example 3: Keep your code secret
+
+If you distribute your Perl code for others to use, it is very
+difficult to keep others from being able to see (and potentially
+steal) your code. L<Obfuscators|Acme::Bleach> are penetrable by
+any determined reverse engineer. Most other suggestions for keeping
+your code secret revolve around running your code on a server,
+and having your clients send input and receive output through a
+network service.
+
+The C<Patro> framework can make this service model easier to use.
+Design a small set of objects that can execute your code, provide
+your clients with a public API for those objects, and make proxies
+to your objects available through C<Patro>.
+
+    # code to run on client machine
+    use Patro;
+    my $cfg = ...    # provided by you
+    my ($obj1,$obj2) = Patro->new($cfg)->getProxies;
+    $result = $obj1->method($arg1,$arg2);
+    ...
+
+In this model, the client can use the objects and methods of your code,
+and inspect the members of your objects through the proxies, but the
+client cannot see the source code.
+
+
 =head1 ENVIRONMENT
 
 C<Patro> pays attention to the following environment variables.
