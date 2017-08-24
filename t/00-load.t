@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use Test::More;
+no warnings 'once';
 
 diag "Patro on $^O $]";
 use_ok( 'Patro' );
