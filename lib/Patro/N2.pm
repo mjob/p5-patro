@@ -3,37 +3,24 @@ use strict;
 use warnings;
 
 # we must keep this namespace very clean
-
 use Carp ();
-use Socket ();
-use Data::Dumper ();
 
 use overload
     '${}' => sub { $_[0]->{scalar} },
     'nomethod' => \&Patro::LeumJelly::overload_handler,
     ;
 
-sub Patro::N2universal {
-    my ($proxy,$command,$context,@args) = @_;
-    return Patro::LeumJelly::proxy_request( $proxy,
-	{ id => $proxy->{id},
-	  topic => 'METHOD',
-	  command => $command,
-	  has_args => @args > 0,
-	  args => \@args,
-	  context => $context } );
-    
-}
-
 # override UNIVERSAL methods
-sub can { Patro::N2universal( 
-	      shift, 'can', defined(wantarray)?1+wantarray:0, @_) }
-sub VERSION { Patro::N2universal(
-		  shift, 'VERSION', defined(wantarray)?1+wantarray:0, @_) }
-sub DOES { Patro::N2universal(
-	       shift, 'DOES', defined(wantarray)?1+wantarray:0, @_) }
-sub isa { Patro::N2universal(
-	      shift, 'isa', defined(wantarray)?1+wantarray:0, @_) }
+foreach my $umethod (keys %UNIVERSAL::) {
+    no strict 'refs';
+    *{$umethod} = sub {
+	my ($proxy,@args) = @_;
+	my $context = defined(wantarray) ? 1 + wantarray : 0;
+	return Patro::LeumJelly::proxy_request( $proxy,
+	    { id => $proxy->{id}, topic => 'METHOD', command => $umethod,
+	      has_args => @args > 0, args => [ @args ], context => $context } );
+    };
+}
 
 sub AUTOLOAD {
     my $method = $Patro::N2::AUTOLOAD;
