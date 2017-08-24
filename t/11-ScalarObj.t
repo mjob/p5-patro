@@ -37,14 +37,6 @@ ok($@ =~ /goodbye/ && $@ =~ /ScalarThing/,
 
 done_testing;
 
-END {
-    if (0 && $$ == $main_pid) {
-	$proxy->DESTROY;
-	undef $proxy;
-	sleep 10;
-    }
-}
-
 
 sub ScalarThing::hello {
     return "hello";

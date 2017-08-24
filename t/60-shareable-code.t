@@ -42,8 +42,10 @@ ok(!$d{foo} && $@, "can't add sub to shared hash");
 eval { $d{bar} = Patro::CODE::Shareable->new($sub2) };
 ok($d{bar} && !$@, "ok to add shareable CODE to shared hash")
     or diag $@;
-ok($d{bar} && $d{bar}->(17) == 36,
-   "ok to execute sub in shared hash");
+
+# does this code fail on perl 5.14?
+ok($d{bar} && eval { $d{bar}->(17) } == 36,
+   "ok to execute sub in shared hash") or diag $@;
 
 my $dispatch = {
     foo => sub { $_[0]->{def}++; return 42 },
