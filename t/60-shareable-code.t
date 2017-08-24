@@ -8,9 +8,14 @@ if (!eval "use threads; use threads::shared; 1") {
     exit;
 }
 require Patro::CODE::Shareable;   # load after threads::shared
-
+Patro::CODE::Shareable->import;
 
 sub sub1 { 42 }
+
+ok(\&threads::shared::share == \&Patro::CODE::Shareable::share,
+   'Patro::CODE::Shareable hijacks threads::shared::share()');
+ok(\&threads::shared::shared_clone == \&Patro::CODE::Shareable::shared_clone,
+   '... and threads::shared::shared_clone()');
 
 my $c1 = Patro::CODE::Shareable->new(\&sub1);
 my $z = eval { share($c1) };
@@ -20,17 +25,23 @@ ok($c1->() == 42, "can invoke shareable code");
 my $sub2 = sub { 19 + $_[0] };
 $z = eval { share($sub2) };
 ok($z && !$@, "share now works on CODE ref") or diag $@;
+ok(ref($sub2) eq 'Patro::CODE::Shareable',
+   "share(CODE) makes code shareable");
+
+$z = eval { share( sub { "totally anonymous sub" } ) };
+ok($z && !$@, "sharing a totally anonymous sub ok");
 
 
 
 my %d : shared;
-ok(is_shared(%d), '%d is shared');
+ok(is_shared(\%d), '%d is shared');
 
-eval { $d{foo} = $sub2 };
+eval { $d{foo} = sub { 17 + $_[0] } };
 ok(!$d{foo} && $@, "can't add sub to shared hash");
 
 eval { $d{bar} = Patro::CODE::Shareable->new($sub2) };
-ok($d{bar} && !$@, "ok to add shareable CODE to shared hash");
+ok($d{bar} && !$@, "ok to add shareable CODE to shared hash")
+    or diag $@;
 ok($d{bar} && $d{bar}->(17) == 36,
    "ok to execute sub in shared hash");
 

@@ -201,8 +201,6 @@ sub overload_handler {
     if ($overloads && $overloads->{$op}) {
 	# operation is overloaded in the remote object.
 	# ask the server to compute the operation result
-
-#       ::xdiag("overload_handler forwarding '$op' op for $handle->{id}");
 	return proxy_request( $handle,
 	    { id => $handle->{id},
 	      topic => 'OVERLOAD',

@@ -47,7 +47,7 @@ sub import {
 	            $_->detach for threads->list(threads::running);
 	        }
 	    }~;
-	} elsif ($tag eq ':code') {
+	} elsif (eval "use threads;1" && $tag eq ':code') {
 	    require Patro::CODE::Shareable;
 	    Patro::CODE::Shareable->import;
 	    Patro::CODE::Shareable->export_to_level(1, 'Patro::CODE::Shareable',

@@ -168,18 +168,41 @@ sub start_server {
 }
 
 # return list of operators that are overloaded on the given object
+my @oplist;
 sub _overloads {
     my $obj = shift;
-    if (!overload::Overloaded($obj)) {
-	return;
+    return unless overload::Overloaded($obj);
+    if (!@oplist) {
+	@oplist = split ' ',join(' ',values %overload::ops);
     }
 
-    my @overloads;
-    foreach my $opses (values %overload::ops) {
-	push @overloads,
-	    grep overload::Method($obj,$_), split ' ', $opses;
+    my %ops = map { $_ => 1 } grep { overload::Method($obj,$_) } @oplist;
+
+    # we also need to account for the operations that are *implicitly*
+    # overloaded.
+
+    # Many ops can be generated out of 0+, "", or bool
+    if ($ops{"0+"} || $ops{'""'} || $ops{bool}) {
+	$ops{$_}++ for qw(0+ "" bool int ! qr . x .= x= <> -X);
     }
-    return \@overloads;
+
+    # assignment ops can be generated from binary ops
+    foreach my $binop (qw(. x + - * / ** % & | ^ << >> &. |. ^.)) {
+	$ops{$binop . "="}++ if $ops{$binop};
+    }
+
+    # all comparison ops can be generated from <=> and cmp
+    @ops{qw{< <= > >= == !=}} = (1) x 6 if $ops{"<=>"};
+    @ops{qw(le lt ge gt eq ne)} = (1) x 6 if $ops{cmp};
+
+    $ops{neg}++ if $ops{"-"};
+    $ops{"--"}++ if $ops{"-="};
+    $ops{abs}++ if $ops{"<"} && $ops{neg};
+    $ops{"++"}++ if $ops{"+="};
+
+    # all ops are overloaded if there is a 'nomethod' specified
+    @ops{@oplist} = (1) x @oplist if $ops{nomethod};
+    return [keys %ops];
 }
 
 sub config {
@@ -535,7 +558,9 @@ sub process_request_OVERLOAD {
     if ($@) {
 	return $self->error_response($@);
     }
-    $z = shared_clone($z);
+    if ($threads_avail) {
+	$z = shared_clone($z);
+    }
     return $self->scalar_response($z);
 }
 
@@ -604,7 +629,7 @@ sub process_request_ARRAY {
 	}
 
 	my @val;
-	if ($threads::threads && threads::shared::is_shared($obj)) {
+	if ($threads_avail && threads::shared::is_shared($obj)) {
 	    # "Splice not implemented for shared arrays" in threads::shared.
 	    # This is a workaround
 	    @val = @{$obj}[$off .. $off+$len-1];
@@ -669,7 +694,7 @@ sub patrol {
     sxdiag("patrol: called on: ",defined($obj) ? "$obj" : "<undef>");
     return $obj unless ref($obj);
 
-    if (ref($obj) eq 'CODE') {
+    if ($threads_avail && ref($obj) eq 'CODE') {
 	$obj = Patro::CODE::Shareable->new($obj);
 	sxdiag("patrol: coderef converted");
     }

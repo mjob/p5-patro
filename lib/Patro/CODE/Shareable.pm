@@ -21,6 +21,10 @@ our $share_orig;
 
 sub new {
     my ($pkg, $coderef) = @_;
+    if (ref($coderef) eq $pkg) {
+	carp "Patro::CODE::Shareable: coderef is already shareable\n";
+	return $coderef;
+    }
     if (ref($coderef) ne 'CODE') {
 	croak "usage: $pkg->new(CODEREF)";
     }
