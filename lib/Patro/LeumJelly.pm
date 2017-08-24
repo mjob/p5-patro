@@ -4,7 +4,7 @@ use warnings;
 use Data::Dumper;
 use Carp;
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 sub isProxyRef {
     my ($pkg) = @_;

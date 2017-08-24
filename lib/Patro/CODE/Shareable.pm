@@ -8,7 +8,7 @@ use strict;
 use warnings;
 use base 'Exporter';
 our @EXPORT = qw(share shared_clone);
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 use overload
     fallback => 1,
