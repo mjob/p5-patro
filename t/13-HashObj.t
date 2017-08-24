@@ -2,7 +2,7 @@ use Test::More;
 use Carp 'verbose';
 use Patro ':test', ':code';
 use Scalar::Util 'reftype';
-use 5.012;
+use 5.010;
 
 my $r0 = HashThing->new( abc => "xyz", def => "foo",
 	   ghi => { jkl => [ 'm','n','o','p',['qrs','tuv']],

@@ -61,8 +61,11 @@ sub new {
 	style => $threads_avail ? 'threaded' : 'forked',
 
 	keep_alive => $OPTS{keep_alive},
-	idle_timeout => $OPTS{idle_timeout}
+	idle_timeout => $OPTS{idle_timeout},
+	version => $Patro::Server::VERSION,
     };
+
+    $Patro::SERVER_VERSION = $Patro::Server::VERSION;
 
     my $obj = {};
     my @store;

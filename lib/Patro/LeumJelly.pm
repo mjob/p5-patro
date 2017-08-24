@@ -3,6 +3,8 @@ use strict;
 use warnings;
 use Data::Dumper;
 use Carp;
+use Storable;
+use Mime::BASE64 ();
 
 our $VERSION = '0.11';
 
@@ -21,18 +23,20 @@ sub handle {
 }
 
 sub serialize {
-    local $Data::Dumper::Useqq = 1;
-    local $Data::Dumper::Indent = 0;
-    local $Data::Dumper::Purity = 1;
-    my $dump = Data::Dumper::Dumper( $_[0] );
-    chomp($dump);
-    return $dump;
+    return MIME::Base64::encode_base64( 
+	Storable::freeze( $_[0] ), "");
 }
 
 sub deserialize {
-    my $VAR1;
-    eval $_[0];
-    $VAR1;
+    if ($Patro::SERVER_VERSION && $Patro::SERVER_VERSION <= 0.10) {
+	# Data::Dumper was used before v0.11
+	my $VAR1;
+	eval $_[0];
+	$VAR1;
+    } else {
+	return Storable::thaw(
+	    MIME::Base64::decode_base64($_[0]));
+    }
 }
 
 # return a Patro::N1 or Patro::N2 object appropriate for the

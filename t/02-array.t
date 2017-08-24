@@ -1,7 +1,7 @@
 use Test::More;
 use Carp 'verbose';
 use Patro ':test';
-use 5.012;
+use 5.010;
 use Scalar::Util 'reftype';
 
 my $r0 = [ 1, 2, 3, 4 ];

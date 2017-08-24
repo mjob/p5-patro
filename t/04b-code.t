@@ -2,7 +2,7 @@ use Test::More;
 use Patro ':test', ':code';
 use Scalar::Util 'reftype', 'refaddr';
 use Carp 'verbose';
-use 5.012;
+use 5.010;
 
 my $dispatch = {
     abc => 12,

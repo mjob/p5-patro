@@ -133,6 +133,8 @@ sub new {
 	objs => [],
     }, $pkg;
 
+    $Patro::SERVER_VERSION = $config->{version};
+
     my $fh0 = select $socket;
     $| = 1;
     select $fh0;
