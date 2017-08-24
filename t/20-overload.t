@@ -12,11 +12,16 @@ if (!eval "use Math::BigInt;1") {
 my $b0 = Math::BigInt->new(42);
 my $b1 = Math::BigInt->new(19);
 my $b2 = Math::BigInt->new(4);
+
 my $cfg = patronize($b0,$b1,$b2);
 ok($cfg, "got config for two Math::BigInt's");
    
 my ($p0,$p1,$p2) = Patro->new($cfg)->getProxies;
 ok($p0 && $p1, "got proxies");
+is($p2->VERSION, $b2->VERSION, '$proxy->VERSION ok');
+ok($b2->isa('Math::BigInt') && !$b2->isa('Poodle'), 'Math::BigInt isa check');
+is($p2->isa('Math::BigInt'), $b2->isa('Math::BigInt'), '$proxy->isa ok');
+is($p2->isa('Poodle'), $b2->isa('Poodle'), '$proxy->isa ok');
 
 # !!! ok($p0+$p1==61,...) works, but
 #     is($p0+$p1,61,...) compares 61 with "Patro::N1=REF(...)"

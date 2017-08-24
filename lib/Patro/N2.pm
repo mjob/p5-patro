@@ -13,17 +13,27 @@ use overload
     'nomethod' => \&Patro::LeumJelly::overload_handler,
     ;
 
-sub can {
-    my ($proxy, $name) = @_;
-    my $context = defined(wantarray) ? 1 + wantarray : 0;
-    return Patro::LeumJelly::proxy_request(
-	$proxy,
+sub Patro::N2universal {
+    my ($proxy,$command,$context,@args) = @_;
+    return Patro::LeumJelly::proxy_request( $proxy,
 	{ id => $proxy->{id},
 	  topic => 'METHOD',
-	  command => 'can',
-	  has_args => 1, args => [ $name ],
+	  command => $command,
+	  has_args => @args > 0,
+	  args => \@args,
 	  context => $context } );
+    
 }
+
+# override UNIVERSAL methods
+sub can { Patro::N2universal( 
+	      shift, 'can', defined(wantarray)?1+wantarray:0, @_) }
+sub VERSION { Patro::N2universal(
+		  shift, 'VERSION', defined(wantarray)?1+wantarray:0, @_) }
+sub DOES { Patro::N2universal(
+	       shift, 'DOES', defined(wantarray)?1+wantarray:0, @_) }
+sub isa { Patro::N2universal(
+	      shift, 'isa', defined(wantarray)?1+wantarray:0, @_) }
 
 sub AUTOLOAD {
     my $method = $Patro::N2::AUTOLOAD;
