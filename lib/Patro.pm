@@ -47,14 +47,15 @@ sub import {
 	            $_->detach for threads->list(threads::running);
 	        }
 	    }~;
-	} elsif (eval "use threads;1" && $tag eq ':code') {
-	    require Patro::CODE::Shareable;
-	    Patro::CODE::Shareable->import;
-	    Patro::CODE::Shareable->export_to_level(1, 'Patro::CODE::Shareable',
-						    'share','shared_clone');
-	    *Patro::Server::shared_clone = *shared_clone;
-	    *Patro::Server::share = *share;
 	}
+    }
+    if (eval "use threads;1") {
+	require Patro::CODE::Shareable;
+	Patro::CODE::Shareable->import;
+	Patro::CODE::Shareable->export_to_level(1, 'Patro::CODE::Shareable',
+						    'share','shared_clone');
+	*Patro::Server::shared_clone = *shared_clone;
+	*Patro::Server::share = *share;
     }
     Patro->export_to_level(1, 'Patro', @args, @EXPORT);
 }

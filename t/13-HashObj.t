@@ -1,6 +1,6 @@
 use Test::More;
 use Carp 'verbose';
-use Patro ':test';
+use Patro ':test', ':code';
 use Scalar::Util 'reftype';
 use 5.012;
 
@@ -56,6 +56,9 @@ is($@,'', 'remote method did not cause an error');
 ok(!exists($r1->{ghi}) && exists($r1->{GHI}),
    'remote object call affects remote object');
 ok_threaded(exists $r0->{GHI}, 'remote object call affects local object');
+
+ok($r1->can('uckeys'), '$proxy->can ok on existing method name');
+ok(!$r1->can('blech'), '$proxy->can ok on bogus method name');
 
 done_testing;
 

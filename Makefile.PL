@@ -5,7 +5,7 @@ use 5.010001;
 
 our %RECOMMENDED = ( 'Sys::HostAddr' => 0 );
 our %REQUIRED = ( 'Devel::GlobalDestruction' => 0 );;
-our @NO_INDEX = ();
+our @NO_INDEX = ( 'threads::shared' );
 
 our %META_MERGE
     = (recommends => \%RECOMMENDED);

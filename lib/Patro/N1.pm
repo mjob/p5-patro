@@ -13,6 +13,18 @@ use overload
     'nomethod' => \&Patro::LeumJelly::overload_handler,
     ;
 
+sub can {
+    my ($proxy,$name) = @_;
+    my $context = defined(wantarray) ? 1 + wantarray : 0;
+    return Patro::LeumJelly::proxy_request( $$proxy,
+	{ id => $$proxy->{id},
+	  topic => 'METHOD',
+	  command => 'can',
+	  has_args => 1,
+	  args => [ $name ],
+	  context => $context } );
+}
+
 sub AUTOLOAD {
     my $method = $Patro::N1::AUTOLOAD;
     $method =~ s/.*:://;

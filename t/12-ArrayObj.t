@@ -64,6 +64,9 @@ my $x = $r1->context_dependent;
 is($x, $r1->get(1), 'context respected in scalar context');
 is(xjoin(\@x),xjoin([5,6,7]), 'context respected in list context');
 
+ok($r1->can('increment'), '$proxy->can ok on valid method name');
+ok(!$r1->can('um, no'), '$proxy->can ok on invalid method name');
+
 done_testing;
 
 # ArrayThing - a blessed ARRAY reference with a couple
