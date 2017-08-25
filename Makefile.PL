@@ -3,7 +3,9 @@ use warnings;
 use ExtUtils::MakeMaker;
 use 5.010001;
 
-our %RECOMMENDED = ( 'Sys::HostAddr' => 0 );
+our %RECOMMENDED = (
+    'Sys::HostAddr' => 0
+    );
 our %REQUIRED = (
     'Devel::GlobalDestruction' => 0,
     'Storable' => 0,
@@ -40,7 +42,7 @@ WriteMakefile(
     VERSION_FROM        => 'lib/Patro.pm',
     ABSTRACT_FROM       => 'lib/Patro.pm',
     PL_FILES            => {},
-    PREREQ_PM => \%REQUIRED,
+    PREREQ_PM           => \%REQUIRED,
     test                => { TESTS => join(' ',@TEST_FILES) },
 
     ($MM_VERSION >= 6.46   ? ('META_MERGE' => \%META_MERGE ) : ()),

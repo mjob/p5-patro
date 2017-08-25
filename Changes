@@ -4,5 +4,5 @@ Revision history for Patro
 	Initial release.
 
 0.11	...
-	The next great thing to happen to Patro
+	- use Storable + MIME::Base64 for serialization instead of Data::Dumper
 

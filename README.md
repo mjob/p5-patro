@@ -113,4 +113,3 @@ proxies to the shared references.
 
 Connects to a server on another machine, specified in the `CONFIG`
 string, and returns proxies to the list of references that are served.
-
