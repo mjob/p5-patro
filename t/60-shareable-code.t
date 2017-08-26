@@ -3,7 +3,8 @@ use strict;
 use warnings;
 use Data::Dumper;
 if (!eval "use threads; use threads::shared; 1") {
-    ok("SKIP: no threads");
+    diag "SKIP: no threads";
+    ok("$0: SKIP - no threads");
     done_testing;
     exit;
 }
