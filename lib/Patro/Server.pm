@@ -546,7 +546,7 @@ sub process_request_OVERLOAD {
         $z = eval { qr/$x/ };
     } elsif ($op eq 'atan2') {
         $z = eval { atan2($x,$y) };
-   } elsif ($op eq 'cos' || $op eq 'sin' || $op eq 'exp' || $op eq 'abs' ||
+    } elsif ($op eq 'cos' || $op eq 'sin' || $op eq 'exp' || $op eq 'abs' ||
              $op eq 'int' || $op eq 'sqrt' || $op eq 'log') {
         $z = eval "$op(\$x)";
     } elsif ($op eq 'bool') {

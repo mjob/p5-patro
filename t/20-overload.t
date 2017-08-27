@@ -3,11 +3,16 @@ use Patro ':test';
 use strict;
 use warnings;
 
-if (!eval "use Math::BigInt;1") {
+if ($threads::threads && 
+    !eval "use Math::BigInt; Math::BigInt->VERSION >= 1.997") {
+
+    # Math::BigInt prior to 1.997 has bug for shared objects
     ok(1,"SKIP - Math::BigInt not available");
+    diag "Overload test requires Math::BigInt 1.997";
     done_testing();
     exit;
 }
+
 
 my $b0 = Math::BigInt->new(42);
 my $b1 = Math::BigInt->new(19);
