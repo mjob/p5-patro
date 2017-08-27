@@ -45,8 +45,13 @@ ok($d{bar} && !$@, "ok to add shareable CODE to shared hash")
     or diag $@;
 
 # this code is not reliable on all versions of perl
-ok($d{bar} && eval { $d{bar}->(17) } == 36,
-   "ok to execute sub in shared hash") or diag $@;
+if ($] < 5.017000) {
+    ok($d{bar} && eval { $d{bar}->_invoke->(17) } == 36,
+       "ok to execute sub in shared hash") or diag $@;
+} else {
+    ok($d{bar} && eval { $d{bar}->(17) } == 36,
+       "ok to execute sub in shared hash") or diag $@;
+}
 
 my $dispatch = {
     foo => sub { $_[0]->{def}++; return 42 },
@@ -66,8 +71,14 @@ use Data::Dumper;
 ok($shpatch->{abc} == 19 && $shpatch->{def} == 35,
    'initial shared dispatch table values ok') or diag Dumper($shpatch);
 
-my $thr1 = threads->create( sub { eval { $shpatch->{foo}->($shpatch) } } );
-my $thr2 = threads->create( sub { eval { $shpatch->{baz}->($shpatch,-5) } } );
+my $thr1 = threads->create( sub { eval { 
+    $] >= 5.017000 ? $shpatch->{foo}->($shpatch)
+	           : $shpatch->{foo}->_invoke->($shpatch)} } );
+my $thr2 = threads->create( sub { 
+    eval {
+	$] >= 5.017000 ? $shpatch->{baz}->($shpatch,-5)
+	               : $shpatch->{baz}->_invoke->($shpatch,-5) 
+    } } );
 my $j1 = $thr1->join;
 my $j2 = $thr2->join;
 ok($j1 == 42, 'thread 1 completed');

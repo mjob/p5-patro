@@ -4,7 +4,7 @@ use warnings;
 use Data::Dumper;
 use Carp;
 use Storable;
-use Mime::BASE64 ();
+use MIME::Base64 ();
 
 our $VERSION = '0.11';
 
@@ -72,7 +72,8 @@ sub getproxy {
 	return bless \$proxy, 'Patro::N1';
     }
 
-    if ($proxy->{reftype} eq 'CODE') {
+    if ($proxy->{reftype} eq 'CODE' ||
+	$proxy->{reftype} eq 'CODE*') {
 	require Patro::N3;
 	$proxy->{sub} = sub {
 	    return proxy_request( $proxy,

@@ -77,8 +77,7 @@ sub new {
 		Patro::CODE::Shareable->import;
 	    }
 	    local $threads::shared::clone_warn = undef;
-	    # hmmmm. shared_clone doesn't work on, say, a dispatch table
-	    # that contains code references under a HASH or ARRAY?
+
 	    eval { $_ = shared_clone($_) };
 	    if ($@ =~ /CODE/) {
 		require Patro::CODE::Shareable;
@@ -100,7 +99,7 @@ sub new {
 	my $reftype = Scalar::Util::reftype($o);
 	my $ref = CORE::ref($o);
 	if ($ref eq 'Patro::CODE::Shareable') {
-	    $ref = $reftype = 'CODE';
+	    $ref = $reftype = 'CODE*';
 	}
 	my $store = {
 	    ref => $ref,
@@ -108,7 +107,7 @@ sub new {
 	    id => $num
 	};
 	if (overload::Overloaded($o)) {
-	    if ($ref ne 'CODE') {
+	    if ($ref ne 'CODE' && $ref ne 'CODE*') {
 		$store->{overload} = _overloads($o);
 	    }
 	}
@@ -494,6 +493,10 @@ sub process_request {
     elsif ($topic eq 'CODE') {
 	my $sub = $self->{obj}{$id};
 	my @r;
+	if (ref($sub) eq 'Patro::CODE::Shareable') {
+	    # not necessary if server uses perl >=v5.18
+	    $sub = $sub->_invoke;
+	}
 	if ($ctx < 2) {
 	    @r = scalar eval { $has_args ? $sub->(@$args) : $sub->() };
 	} else {
