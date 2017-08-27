@@ -216,7 +216,38 @@ sub config {
 	style => $self->{meta}{style},
 	version => $Patro::Server::VERSION
     };
-    return $config_data;
+    return bless $config_data, 'Patro::Config';
+}
+
+sub Patro::Config::to_file {
+    my ($self,$file) = @_;
+    if (!$file) {
+	# TODO: select a temp filename
+    }
+    my $fh;
+    if (!open($fh, '>', $file)) {
+	croak "Patro::Config::to_file: could not write cfga file '$file': $!";
+    }
+    print $fh Patro::LeumJelly::serialize({%$self});
+    close $fh;
+    return $file;
+}
+
+sub Patro::Config::from_file {
+    my ($self, $file) = @_;
+    if (!defined($file) && !ref($self) && $self ne 'Patro::Config') {
+	$file = $self;
+    }
+    my $fh;
+    if (ref($file) eq 'GLOB') {
+	$fh = $file;
+    } elsif (!open $fh, '<' ,$file) {
+	croak "Patro::Config::fron_file: could not read cfg file '$file': $!";
+    }
+    my $data = <$fh>;
+    my $cfg = Patro::LeumJelly::deserialize($data);
+    bless $cfg, 'Patro::Config';
+    return $cfg;
 }
 
 sub accept_clients {

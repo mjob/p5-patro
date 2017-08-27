@@ -100,13 +100,11 @@ sub main::xdiag {
 	my @lt = localtime;
 	my $lt = sprintf "%02d:%02d:%02d", @lt[2,1,0];
 	my $pid = $$;
-	if ($Patro::Server::threads_avail) {
-	    $pid .= "-" . threads->tid;
-	}
+	$pid .= "-" . threads->tid if $threads::threads;
 	Test::More::diag("xdiag $pid $lt: ",
 	    map { CORE::ref($_) ? Data::Dumper::Dumper($_) : $_ } @_ );
     } else {
-	print STDERR "ZZZZZ ", Data::Dumper::Dumper(@_);
+	print STDERR "xdiag: ", Data::Dumper::Dumper(@_),"\n";
     }
 }
 

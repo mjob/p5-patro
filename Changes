@@ -4,5 +4,8 @@ Revision history for Patro
 	Initial release.
 
 0.11	...
-	- use Storable + MIME::Base64 for serialization instead of Data::Dumper
+	- Use Storable + MIME::Base64 for serialization instead of Data::Dumper
+	- Include fixes and workarounds for thread-shared code references
+	  with perls older than v5.17
+
 
