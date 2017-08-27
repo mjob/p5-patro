@@ -14,7 +14,7 @@ ok($r0 && ref($r0) eq 'ArrayThing', 'created remote var');
 my $cfg = patronize($r0);
 ok($cfg, 'got config for patronize array ref');
 
-my ($r1) = Patro->new($cfg)->getProxies;
+my ($r1) = Patro->new($cfg->to_string)->getProxies;
 
 ok($r1, 'client as boolean');
 is(CORE::ref($r1), 'Patro::N1', 'client ref');

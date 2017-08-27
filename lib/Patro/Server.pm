@@ -219,6 +219,11 @@ sub config {
     return bless $config_data, 'Patro::Config';
 }
 
+sub Patro::Config::to_string {
+    my ($self) = @_;
+    return Patro::LeumJelly::serialize({%$self});
+}
+
 sub Patro::Config::to_file {
     my ($self,$file) = @_;
     if (!$file) {
@@ -228,9 +233,15 @@ sub Patro::Config::to_file {
     if (!open($fh, '>', $file)) {
 	croak "Patro::Config::to_file: could not write cfga file '$file': $!";
     }
-    print $fh Patro::LeumJelly::serialize({%$self});
+    print $fh $self->to_string;
     close $fh;
     return $file;
+}
+
+sub Patro::Config::from_string {
+    my ($self, $string) = @_;
+    my $cfg = Patro::LeumJelly::deserialize($string);
+    return bless $cfg, 'Patro::Config';
 }
 
 sub Patro::Config::from_file {
@@ -245,9 +256,8 @@ sub Patro::Config::from_file {
 	croak "Patro::Config::fron_file: could not read cfg file '$file': $!";
     }
     my $data = <$fh>;
-    my $cfg = Patro::LeumJelly::deserialize($data);
-    bless $cfg, 'Patro::Config';
-    return $cfg;
+    close $fh;
+    return Patro::Config->from_string($data);
 }
 
 sub accept_clients {

@@ -109,7 +109,6 @@ sub proxy_request {
 	foreach my $arg (@{$request->{args}}) {
 	    if (isProxyRef(ref($arg))) {
 		my $id = handle($arg)->{id};
-#		::xdiag("client: arg $id as .Patroon");
 		$arg = bless \$id, '.Patroon';
 	    }
 	}

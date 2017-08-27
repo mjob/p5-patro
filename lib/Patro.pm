@@ -112,6 +112,18 @@ sub main::xdiag {
 
 sub new {
     my ($pkg,$config) = @_;
+
+    # want config to be a Patro::Config
+    # but it could be a string or a filenae (from Patro::Config::to_string
+    # or to_file)
+    if (!CORE::ref($config)) {
+	if (-f $config) {
+	    $config = Patro::Config->from_file($config);
+	} else {
+	    $config = Patro::Config->from_string($config);
+	}
+    }
+
     croak __PACKAGE__,": no host" unless $config->{host};
     croak __PACKAGE__,": no port" unless $config->{port};
 
@@ -172,13 +184,12 @@ Patro - proxy access to remote objects
     use Patro;
     my $obj = ...
     $config = patronize($obj);
-    open my $fh, '>config_file'; print $fh $config; close $fh;
+    $config->to_file( 'config_file' );
 
 
     # on machines 2 through n (clients)
     use Patro;
-    open my $fh, '<config_file'; my $config=<$fh>; close $fh;
-    my ($proxy) = Patro->new($config)->getProxies;
+    my ($proxy) = Patro->new( 'config_file' )->getProxies;
     ...
     $proxy->{key} = $val;         # updates $obj->{key} for obj on server
     $val = $proxy->method(@args); # calls $obj->method for obj on server
@@ -223,12 +234,12 @@ affecting the remote object and returning the result of the call.
     use Patro;
     sub Foofie::new { bless \$_[1],'Foofie' }
     sub Foofie::blerp { my $self=shift; wantarray ? (5,6,7,$$self) : ++$$self }
-    $config = patronize(Foofie->new(17));
+    patronize(Foofie->new(17))->to_file('/config/file');
     ...
 
     # host 2
     use Patro;
-    my $foo = Patro->new($config)->getProxies;
+    my $foo = Patro->new('/config/file')->getProxies;
     my @x = $foo->blerp;           # (5,6,7,17)
     my $x = $foo->blerp;           # 18
 
@@ -241,6 +252,7 @@ remote object.
     use Patro;
     my $obj = Barfie->new(2,5);
     $config = patronize($obj);
+    $config->to_file( 'config' );
     package Barfie;
     use overload '+=' => sub { $_ += $_[1] for @{$_[0]->{vals}};$_[0] },
          fallback => 1;
@@ -252,7 +264,7 @@ remote object.
 
     # host 2
     use Patro;'
-    my $proxy = getProxies($config);
+    my $proxy = getProxies('config');
     print $proxy->prod;      # calls Barfie::prod($obj) on host1, 2 * 5 => 10
     $proxy += 4;             # calls Barfie '+=' sub on host1
     print $proxy->prod;      # 6 * 9 => 54
@@ -266,14 +278,21 @@ remote object.
     CONFIG = patronize(@REFS)
 
 Creates a server on the local machine that provides proxy access to
-the given list of references. It returns a string (some `Data::Dumper`
-output) with information about how to connect to the server. The output
-can be used as input to the `getProxies()` function to retrieve
-proxies to the shared references.
+the given list of references. It returns an object
+with information about how to connect to the server. 
+
+The returned object has C<to_string> and C<to_file> methods
+to store the configuration where it can be read by other processes.
+Either the object, its string representation, or the filename 
+containing config information may be used as input to the
+L<"getProxies"> function to retrieve proxies to the shared
+references.
 
 =head2 getProxies
 
     PROXIES = getProxies(CONFIG)
+    PROXIES = getProxies(STRING)
+    PROXIES = getProxies(FILENAME)
 
 Connects to a server on another machine, specified in the C<CONFIG>
 string, and returns proxies to the list of references that are served.
@@ -378,16 +397,12 @@ several machines.
     # master
     use Patro;
     my $queue = [ 'job 1', 'job 2', ... ];
-    open my $fh, '>', '/network/accessible/file';
-    print $fh patronize($queue);
-    close $fh;
+    patronize($queue)->to_file('/network/accessible/file');
     ...
 
     # slaves
     use Patro;
-    open my $fh, '<', '/network/accessible/file';
-    my $queue = Patro->new(<$fh>)->getProxies;
-    close $fh;
+    my $queue = Patro->new('/network/accessible/file')->getProxies;
 
     while (my $task = shift @$queue) {
         ... do task ...
