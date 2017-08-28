@@ -9,7 +9,7 @@ use Carp;
 use base 'Exporter';
 our @EXPORT = qw(patronize getProxies);
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 sub import {
     my ($class, @args) = @_;
@@ -176,7 +176,7 @@ Patro - proxy access to remote objects
 
 =head1 VERSION
 
-0.11
+0.12
 
 =head1 SYNOPSIS
 

@@ -6,7 +6,7 @@ use Carp;
 use Storable;
 use MIME::Base64 ();
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 sub isProxyRef {
     my ($pkg) = @_;
