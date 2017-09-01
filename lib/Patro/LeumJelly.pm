@@ -250,6 +250,209 @@ sub overload_handler {
     return eval "\$str $op \$y";
 }
 
+######################################################################
+#
+# useful edits and extensions to threads::shared
+#
+# 1. support splice on shared arrays
+# 2. support CODE refs in shared data structures
+# 3. support GLOB refs in shared data structures
+#
+
+our $_extended = 0;
+our $share_code;
+our $share_glob;
+our $make_shared;
+
+sub extend_threads_shared {
+    no warnings 'redefine';
+    if ($_extended++) {
+#	carp "Patro::LeumJelly::extend_threads_shared called again!";
+#	return;
+    }
+    if (!defined &share_orig) {
+	*share_orig = \&threads::shared::share;
+    }
+    *threads::shared::shared_clone = \&Patro::LeumJelly::_shared_clone;
+    *threads::shared::share = \&Patro::LeumJelly::_share;
+    *threads::shared::tie::SPLICE = \&Patro::LeumJelly::threads_shared_tie_SPLICE;
+    $share_code = 1;
+    $share_glob = 1;
+}
+
+sub threads_shared_tie_SPLICE {
+    use B;
+    my ($tied,$off,$len,@list) = @_;
+    my @bav = B::AV::ARRAY($tied);
+    my $arraylen = 0 + @bav;
+    if ($off < 0) {
+	$off += $arraylen;
+	if ($off < 0) {
+	    croak "Modification of non-createable array value attempated, ",
+		"subscript $_[1]";
+	}
+    }
+    if (!defined $len || $len eq 'undef') {
+	$len = $arraylen - $off;
+    }
+    if ($len < 0) {
+	$len += $arraylen - $off;
+	if ($len < 0) {
+	    $len = 0;
+	}
+    }
+
+    my (@tmp, @val);
+    for (my $i=0; $i<$off; $i++) {
+	my $fetched = $bav[$i]->object_2svref;
+	push @tmp, $$fetched;
+    }
+    for (my $i=0; $i<$len; $i++) {
+	my $fetched = $bav[$i+$off]->object_2svref;
+	push @val, $$fetched;
+    }
+    push @tmp, map { _shared_clone($_) } @list;
+    for (my $i=$off+$len; $i<$arraylen; $i++) {
+	my $fetched = $bav[$i]->object_2svref;
+	push @tmp, $$fetched;
+    }
+
+    # is there a better way to clear the array?
+    $tied->POP for 0..$arraylen;
+    $tied->PUSH(@tmp);
+    return @val;
+}
+
+sub _share (\[$@%]) {
+    if (ref($_[0]) eq 'CODE' && $share_code) {
+	return $_[0] = threadsx::shared::code->new( $_[0] );
+    } elsif (ref($_[0]) eq 'GLOB' && $share_glob) {
+	return $_[0] = threadsx::shared::glob->new( $_[0] );
+    } elsif (ref($_[0]) eq 'REF') {
+	if (ref(${$_[0]}) eq 'CODE' && $share_code) {
+	    return $_[0] = threadsx::shared::code->new( ${$_[0]} );
+	} elsif (ref(${$_[0]}) eq 'GLOB' && $share_glob) {
+	    return $_[0] = threadsx::shared::glob->new( ${$_[0]} );
+	}
+    }
+    share_orig( $_[0] );
+}
+
+*_shared_clone = sub {
+    return $make_shared->(shift, {});
+};
+
+
+# copied from threads::shared 1.48
+$make_shared = sub {
+    package
+	threads::shared;
+    use Scalar::Util qw(reftype refaddr blessed);
+    my ($item,$cloned) = @_;
+    return $item if (!ref($item) || threads::shared::is_shared($item)
+		     || !$threads::threads);
+    my $addr = refaddr($item);
+    return $cloned->{$addr} if exists $cloned->{$addr};
+    my ($ref_type,$copy) = reftype($item);
+    if ($ref_type eq 'ARRAY') {
+	$copy = &threads::shared::share( [] );
+	$cloned->{$addr} = $copy;
+	push @$copy, map { $make_shared->($_,$cloned) } @$item;
+    } elsif ($ref_type eq 'HASH') {
+	my $ccc = {};
+	$copy = &threads::shared::share( $ccc );
+	$cloned->{$addr} = $copy;
+	while (my ($k,$v) = each %$item) {
+	    $copy->{$k} = $make_shared->($v,$cloned);
+	}
+    } elsif ($ref_type eq 'SCALAR') {
+	$copy = \do{ my $scalar = $$item };
+	threads::shared::share($copy);
+	$cloned->{$addr} = $copy;
+    } elsif ($ref_type eq 'REF') {
+	if ($addr == refaddr($$item)) {
+	    $copy = \$copy;
+	    threads::shared::share($copy);
+	    $cloned->{$addr} = $copy;
+	} else {
+	    my $tmp;
+	    $copy = \$tmp;
+	    threads::shared::share($copy);
+	    $cloned->{$addr} = $copy;
+	    $tmp = $make_shared->($$item,$cloned);
+	}
+    } elsif ($ref_type eq 'CODE') {
+	$copy = $cloned->{$addr} = threadsx::shared::code->new($item);
+    } elsif ($ref_type eq 'GLOB') {
+	$copy = $cloned->{$addr} = threadsx::shared::code->new($item);
+    } else {
+	require Carp;
+	if (! defined $threads::shared::clone_warn) {
+	    Carp::croak("Unsupported ref type: ", $ref_type);
+	} elsif ($threads::shared::clone_warn) {
+	    Carp::carp("Unsupported ref type: ", $ref_type);
+	}
+	return undef;   
+    }
+
+    # If input item is an object, then bless the copy into the same class
+    if (my $class = blessed($item)) {
+        CORE::bless($copy, $class);
+    }
+
+    # Clone READONLY flag
+    if ($ref_type eq 'SCALAR') {
+        if (Internals::SvREADONLY($$item)) {
+            Internals::SvREADONLY($$copy, 1) if ($] >= 5.008003);
+        }
+    }
+    if (Internals::SvREADONLY($item)) {
+        Internals::SvREADONLY($copy, 1) if ($] >= 5.008003);
+    }
+
+    return $copy;
+};
+
+package
+    threadsx::shared::code;
+use overload fallback => 1, '&{}' => 'code';
+use Carp;
+our %CODE_LOOKUP;
+sub new {
+    my ($pkg,$ref) = @_;
+    if (ref($ref) eq $pkg) {
+	carp "threadsx::shared::code: ref is already shareable code";
+	return $ref;
+    } elsif (ref($ref) ne 'CODE') {
+	croak "usage: $pkg->new(CODE)";
+    }
+    my $id = Scalar::Util::refaddr($ref);
+    $CODE_LOOKUP{$id} //= $ref;
+    threads::shared::shared_clone(CORE::bless \$id, $pkg);
+}
+sub code {
+    return $CODE_LOOKUP{${$_[0]}} || 
+	sub { croak "threadsx::shared::code: bad ",__PACKAGE__," id ${$_[0]}" };
+}
+
+package
+    threadsx::shared::glob;
+use overload fallback => 1, '*{}' => 'glob';
+use Carp;
+our %GLOB_LOOKUP;
+sub new {
+    my ($pkg,$ref) = @_;
+    if (ref($ref) eq $pkg) {
+	carp "threadsx::shared::glob: ref is already shareable glob";
+	return $ref;
+    } elsif (ref($ref) ne 'GLOB') {
+	croak "usage: $pkg->new(GLOB)";
+    }
+    my $id = Scalar::Util::refaddr($ref);
+    $GLOB_LOOKUP{$id} //= $ref;
+    threads::shared::shared_clone(CORE::bless \$id, $pkg);
+}
+sub glob { return $GLOB_LOOKUP{${$_[0]}} || *STDERR }
 
 1;
 

@@ -12,7 +12,11 @@ our $threads_avail = eval "use threads; use threads::shared; 1";
 if (defined $ENV{PATRO_THREADS}) {
     no warnings 'redefine';
     $threads_avail = $ENV{PATRO_THREADS};
-    *threads::shared::tie::SPLICE = \&threads_shared_tie_SPLICE;
+}
+if ($threads_avail) {
+    require Patro::LeumJelly;
+    Patro::LeumJelly->import;
+    Patro::LeumJelly::extend_threads_shared();
 }
 
 *sxdiag = sub {};
@@ -72,17 +76,16 @@ sub new {
 
     if ($threads_avail) {
 	for (@_) {
-	    if (CORE::ref($_) eq 'CODE') {
-		require Patro::CODE::Shareable;
-		Patro::CODE::Shareable->import;
-	    }
 	    local $threads::shared::clone_warn = undef;
-
-	    eval { $_ = shared_clone($_) };
+	    $DB::single = 1;
+	    
+	    eval { $_ = threads::shared::shared_clone($_) };
 	    if ($@ =~ /CODE/) {
-		require Patro::CODE::Shareable;
+		require Patro::LeumJelly;
+		warn "I am really surprised to see this message";
+		warn $@;
 		$threads::shared::clone_warn = 0;
-		$_ = shared_clone($_);
+		$_ = threads::shared::shared_clone($_);
 	    }
 	}
     }
@@ -98,7 +101,7 @@ sub new {
 	$obj->{$num} = $o;
 	my $reftype = Scalar::Util::reftype($o);
 	my $ref = CORE::ref($o);
-	if ($ref eq 'Patro::CODE::Shareable') {
+	if ($ref eq 'threadsx::shared::code') {
 	    $ref = $reftype = 'CODE*';
 	}
 	my $store = {
@@ -534,9 +537,9 @@ sub process_request {
     elsif ($topic eq 'CODE') {
 	my $sub = $self->{obj}{$id};
 	my @r;
-	if (ref($sub) eq 'Patro::CODE::Shareable') {
+	if (ref($sub) eq 'threadsx::shared::code') {
 	    # not necessary if server uses perl >=v5.18
-	    $sub = $sub->_invoke;
+	    $sub = $sub->code;
 	}
 	if ($ctx < 2) {
 	    @r = scalar eval { $has_args ? $sub->(@$args) : $sub->() };
@@ -606,7 +609,7 @@ sub process_request_OVERLOAD {
 	return $self->error_response($@);
     }
     if ($threads_avail) {
-	$z = shared_clone($z);
+	$z = threads::shared::shared_clone($z);
     }
     return $self->scalar_response($z);
 }
@@ -694,10 +697,10 @@ sub process_request_ARRAY {
 	}	
 	return $self->list_response(@val);
     } elsif ($command eq 'PUSH') {
-	my $n = push @{$obj}, _share(@$args);
+	my $n = push @{$obj}, map threads::shared::shared_clone($_),@$args;
 	return $self->scalar_response($n);
     } elsif ($command eq 'UNSHIFT') {
-	my $n = unshift @$obj, _share(@$args);
+	my $n = unshift @$obj, map threads::shared::shared_clone($_),@$args;
 	return $self->scalar_response($n);
     } elsif ($command eq 'POP') {
 	return $self->scalar_response(pop @$obj);
@@ -710,22 +713,11 @@ sub process_request_ARRAY {
     die "tied ARRAY function '$command' not recognized";
 }
 
-sub _share {
-    if (!$threads_avail) {
-	return @_;
-    } else {
-	return map {
-	    CORE::ref($_) eq 'CODE' ? $_
-		: CORE::ref($_) ? shared_clone($_) : $_;
-	} @_
-    }
-}
-
 sub process_request_SCALAR {
     my ($self,$obj,$command,$has_args,$args) = @_;
     if ($command eq 'STORE') {
-	${$obj} = $args->[0];
-	return $self->scalar_response(_share(${$obj}));
+	${$obj} = threads::shared::shared_clone($args->[0]);
+	return $self->scalar_response(${$obj});
     } elsif ($command eq 'FETCH') {
 	my $return = $self->scalar_response(${$obj});
 	return $return;
@@ -742,7 +734,7 @@ sub patrol {
     return $obj unless ref($obj);
 
     if ($threads_avail && ref($obj) eq 'CODE') {
-	$obj = Patro::CODE::Shareable->new($obj);
+	$obj = threadsx::shared::code->new($obj);
 	sxdiag("patrol: coderef converted");
     }
 
@@ -755,7 +747,7 @@ sub patrol {
 	$self->{obj}{$id} = $obj;
 	my $ref = ref($obj);
 	my $reftype;
-	if ($ref eq 'Patro::CODE::Shareable') {
+	if ($ref eq 'threadsx::shared::code') {
 	    $ref = 'CODE';
 	    $reftype = 'CODE';
 	} else {
@@ -807,64 +799,6 @@ sub TEST_MODE {
     if ($threads_avail) {
 	$OPTS{fincheck_freq} = "0 but true";	    
     }
-}
-
-
-
-no warnings 'redefine';
-
-# core  threads::shared  has a limitation in that the  splice  function
-# can not be used on shared arrays. We can hijack  threads::shared::tie::SPLICE
-# with this function, that performs the splice operation without using
-# the splice function, to work around this limitation.
-# This is not a very efficient implementation, but it is better than
-# a sharp stick in the eye.
-#
-sub threads_shared_tie_SPLICE {
-    use Data::Dumper;
-    use B;
-
-    my ($tied,$off,$len,@list) = @_;
-    my @bav = B::AV::ARRAY($tied);
-    my $arraylen = 0 + @bav;
-    if ($off < 0) {
-	$off += $arraylen;
-	if ($off < 0) {
-	    croak "Modification of non-createable array value attempated, ",
-		"subscript $_[1]";
-	}
-    }
-    if (!defined $len || $len eq 'undef') {
-	$len = $arraylen - $off;
-    }
-    if ($len < 0) {
-	$len += $arraylen - $off;
-	if ($len < 0) {
-	    $len = 0;
-	}
-    }
-
-    my (@tmp, @val);
-    for (my $i=0; $i<$off; $i++) {
-	my $fetched = $bav[$i]->object_2svref;
-	push @tmp, $$fetched;
-    }
-    for (my $i=0; $i<$len; $i++) {
-	my $fetched = $bav[$i+$off]->object_2svref;
-	push @val, $$fetched;
-    }
-    push @tmp, @list;
-    for (my $i=$off+$len; $i<$arraylen; $i++) {
-	my $fetched = $bav[$i]->object_2svref;
-	push @tmp, $$fetched;
-    }
-    # is there a better way to clear the array?
-    $tied->STORESIZE($#tmp + 1);
-    $tied->POP for 0..$arraylen;
-
-    $tied->PUSH(@tmp);
-
-    return @val;
 }
 
 1;

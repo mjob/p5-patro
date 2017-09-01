@@ -49,13 +49,8 @@ sub import {
 	    }~;
 	}
     }
-    if (eval "use threads;1") {
-	require Patro::CODE::Shareable;
-	Patro::CODE::Shareable->import;
-	Patro::CODE::Shareable->export_to_level(1, 'Patro::CODE::Shareable',
-						    'share','shared_clone');
-	*Patro::Server::shared_clone = *shared_clone;
-	*Patro::Server::share = *share;
+    if (eval "use threads;use threads::shared;1") {
+	Patro::LeumJelly::extend_threads_shared();
     }
     Patro->export_to_level(1, 'Patro', @args, @EXPORT);
 }

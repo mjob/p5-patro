@@ -44,7 +44,6 @@ WriteMakefile(
     PL_FILES            => {},
     PREREQ_PM           => \%REQUIRED,
     test                => { TESTS => join(' ',@TEST_FILES) },
-
     ($MM_VERSION >= 6.46   ? ('META_MERGE' => \%META_MERGE ) : ()),
     ($MM_VERSION >= 6.3002 ? ('LICENSE'    => 'perl')        : ()),
 
