@@ -469,6 +469,39 @@ reference on the server (unless you use a class that does not save
 state in local memory, like L<Forks::Queue>).
 
 
+=head1 DOCUMENTATION AND SUPPORT
+
+Up-to-date (blead version) sources for C<Patro> are on github at
+L<https://github.com/mjob/p5-patro>
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc Patro
+
+You can also look for information at:
+
+=over 4
+
+=item * RT: CPAN's request tracker
+
+Report bugs and request missing features at
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Patro>
+
+=item * AnnoCPAN: Annotated CPAN documentation
+
+L<http://annocpan.org/dist/Patro>
+
+=item * CPAN Ratings
+
+L<http://cpanratings.perl.org/d/Patro>
+
+=item * Search CPAN
+
+L<http://search.cpan.org/dist/Patro/>
+
+=back
+
+
 =head1 LICENSE AND COPYRIGHT
 
 MIT License
