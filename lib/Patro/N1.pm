@@ -184,8 +184,6 @@ sub Patro::Tie::HANDLE::EOF { return shift->__('EOF',1,@_) }
 sub Patro::Tie::HANDLE::FILENO { return shift->__('FILENO',1,@_) }
 sub Patro::Tie::HANDLE::SEEK { return shift->__('SEEK',1,@_) }
 sub Patro::Tie::HANDLE::TELL { return shift->__('TELL',1,@_) }
-sub Patro::Tie::HANDLE:: { return shift->__('',1,@_) }
-
 
 ############################################################
 

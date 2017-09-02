@@ -19,7 +19,8 @@ t/02b-splice.t
 t/03-hash.t
 t/04a-code.t
 t/04b-code.t
-t/05-filehandles.t
+t/05a-filehandles.t
+t/05b-filehandles.t
 t/11-ScalarObj.t
 t/12-ArrayObj.t
 t/13-HashObj.t

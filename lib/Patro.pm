@@ -164,9 +164,11 @@ sub getProxies {
 
 Patro - proxy access to remote objects
 
+
 =head1 VERSION
 
 0.12
+
 
 =head1 SYNOPSIS
 
@@ -259,7 +261,16 @@ remote object.
     $proxy += 4;             # calls Barfie '+=' sub on host1
     print $proxy->prod;      # 6 * 9 => 54
 
+=item * Code references
+
+...
+
+=item * filehandles
+
+...
+
 =back
+
 
 =head1 FUNCTIONS
 
@@ -317,6 +328,7 @@ Returns the IPC client object used by the given proxy to communicate
 with the remote object server. The client object contains information
 about how to communicate with the server and other connection 
 configuration.
+
 
 =head1 PROXIES
 
@@ -438,6 +450,24 @@ If the environment variable C<PATRO_THREADS> is set, C<Patro> will use
 it to determine whether to use a forked server or a threaded server
 to provide proxy access to objects. If this variable is not set,
 C<Patro> will use threads if the L<threads> module can be loaded.
+
+
+=head1 LIMITATIONS
+
+Proxy filehandles use the C<tie> mechanism for filehandles, so
+C<sysopen>, C<truncate>, C<flock>, C<fcntl>, C<stat HANDLE>,
+and C<-X HANDLE> functions are not supported on proxy filehandles,
+as documented in L<perltie>.
+
+When the server uses forks (because threads are unavailable or
+because L<"PATRO_THREADS"> was set to a false value), it is less
+practical to share variables between processes.
+When you manipulate a proxy reference, you are
+manipulating the copy of the reference running in a different process
+than the remote server. So you will not observe a change in the
+reference on the server (unless you use a class that does not save
+state in local memory, like L<Forks::Queue>).
+
 
 =head1 LICENSE AND COPYRIGHT
 

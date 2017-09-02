@@ -146,7 +146,7 @@ sub start_server {
 		    open my $fh, '>>', $self->{meta}{pid_file};
 		    flock $fh, 2;
 		    seek $fh, 0, 2;
-		    print $fh "$$-", threads->tid, "\n";
+		    print {$fh} "$$-", threads->tid, "\n";
 		    close $fh;
 		}
 		$self->accept_clients;
@@ -166,7 +166,7 @@ sub start_server {
 		open my $fh, '>>', $self->{meta}{pid_file};
 		flock $fh, 2;
 		seek $fh, 0, 2;
-		print $fh "$$\n";
+		print {$fh} "$$\n";
 		close $fh;
 	    }
 	    $self->accept_clients;
@@ -240,7 +240,7 @@ sub Patro::Config::to_file {
     if (!open($fh, '>', $file)) {
 	croak "Patro::Config::to_file: could not write cfga file '$file': $!";
     }
-    print $fh $self->to_string;
+    print {$fh} $self->to_string;
     close $fh;
     return $file;
 }
@@ -285,10 +285,10 @@ sub accept_clients {
 	my $server = $meta->{socket};
 	my $paddr = accept($client,$server);
 	if (!$paddr) {
-	    if ($!{EINTR} || $!{ECHILD}) {
-		next;
-	    }
-	    croak __PACKAGE__, ": accept $!";
+	    next if $!{EINTR};
+	    next if $!{ECHILD} || $!==10;   # !?! why $!{ECHILD} not suff on Lin?
+	    ::xdiag("accept failure, %errno is",\%!);
+	    croak __PACKAGE__, ": accept ", 0+$!," $!";
 	}
 	$meta->{last_connection} = time;
 
@@ -309,7 +309,7 @@ sub start_subserver {
 		open my $fh, '>>', $self->{meta}{pid_file};
 		flock $fh, 2;
 		seek $fh, 0, 2;
-		print $fh "$pid\n";
+		print {$fh} "$pid\n";
 		close $fh;
 	    }
 	    $self->{meta}{pids}{$pid}++;
@@ -328,7 +328,7 @@ sub start_subserver {
 	    open my $fh, '>>', $self->{meta}{pid_file};
 	    flock $fh, 2;
 	    seek $fh, 0, 2;
-	    print $fh "$$-", $subthread->tid, "\n";
+	    print {$fh} "$$-", $subthread->tid, "\n";
 	    close $fh;
 	}
 	$self->{meta}{pids}{"$$-" . $subthread->tid}++;
@@ -736,9 +736,10 @@ sub process_request_SCALAR {
 }
 
 sub process_request_HANDLE {
-    my ($self,$fh,$command,$context,$has_args,$args) = @_;
+    my ($self,$obj,$command,$context,$has_args,$args) = @_;
+    my $fh = ref($obj) eq 'threadsx::shared::glob' ? $obj->glob : $obj;
     if ($command eq 'PRINT') {
-	my $z = print {*$fh} @$args;
+	my $z = print {$fh} @$args;
 	return $self->scalar_response($z);
     } elsif ($command eq 'PRINTF') {
 	if ($has_args) {
@@ -746,6 +747,7 @@ sub process_request_HANDLE {
 	    my $z = printf {$fh} $template, @$args;
 	    return $self->scalar_response($z);
 	} else {
+	    # I don't think we can get here through the proxy
 	    my $z = printf {$fh} "";
 	    return $self->scalar_response($z);
 	}
@@ -756,15 +758,56 @@ sub process_request_HANDLE {
 	return $self->scalar_response(syswrite $fh, $args->[0],
 				      $args->[1] // undef, $args->[2] // undef);
     } elsif ($command eq 'READLINE') {
+	if ($context > 1) {
+	    my @val = readline($fh);
+	    return $self->list_response(@val);
+	} else {
+	    my $val = readline($fh);
+	    return $self->scalar_response($val);
+	}
     } elsif ($command eq 'GETC') {
+	local $! = 0;
+	my $ch = getc($fh);
+	return $self->scalar_response($ch);
     } elsif ($command eq 'READ') {
-    } elsif ($command eq 'CLOSE') {
-    } elsif ($command eq 'BINMODE') {
-    } elsif ($command eq 'OPEN') {
+	if (@$args < 2) {
+	    # I don't think we can get here through the proxy
+	    return $self->error_response("Not enough arguments for read");
+	}
+	my $bufref = \$args->[0];
+	my (undef, $len, $off) = @$args;
+	my $z;
+
+	if (!defined $off) {
+	    $z = eval { sysread $fh, $$bufref, $len };
+	} else {
+	    $z = eval { sysread $fh, $$bufref, $len, $off };
+	}
+	if ($@) {
+	    return $self->error_response($@);
+	} else {
+	    return $self->scalar_response($z, { out => [1,$$bufref] })
+	}
     } elsif ($command eq 'EOF') {
+	return $self->scalar_response( eof($fh) );
     } elsif ($command eq 'FILENO') {
+	my $z = fileno($fh);
+	return $self->scalar_response($z);
     } elsif ($command eq 'SEEK') {
+	if (@$args < 2) {
+	    return $self->error_response("Not enough arguments for seek");
+	} elsif (@$args > 2) {
+	    return $self->error_response("Too many arguments for seek");
+	} else {
+	    my $z = seek $fh, $args->[0], $args->[1];
+	    return $self->scalar_response($z);
+	}
     } elsif ($command eq 'TELL') {
+	my $z = tell($fh);
+	return $self->scalar_response($z);
+    } elsif ($command eq 'BINMODE') {
+    } elsif ($command eq 'CLOSE') {
+    } elsif ($command eq 'OPEN') {
     }
     return $self->error_response("tied HANDLE function '$command' not found");
 }
@@ -824,10 +867,11 @@ sub void_response {
 }
 
 sub scalar_response {
-    my ($self,$val) = @_;
+    my ($self,$val,$addl) = @_;
     return +{
 	context => 1,
-	response => $val
+	response => $val,
+	$addl ? %$addl : ()
     };
 }
 
