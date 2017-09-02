@@ -128,7 +128,6 @@ sub new {
 	    }
 	}~;
     }
-    ::xdiag("added END code to detach!");
     return $self;
 }
 
@@ -739,9 +738,7 @@ sub process_request_SCALAR {
 sub process_request_HANDLE {
     my ($self,$fh,$command,$context,$has_args,$args) = @_;
     if ($command eq 'PRINT') {
-	::xdiag("Printing ",$args," to ",$fh);
 	my $z = print {*$fh} @$args;
-	::xdiag("print result: $z");
 	return $self->scalar_response($z);
     } elsif ($command eq 'PRINTF') {
 	if ($has_args) {
