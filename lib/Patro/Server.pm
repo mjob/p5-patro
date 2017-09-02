@@ -8,15 +8,10 @@ use Scalar::Util 'reftype';
 use POSIX ':sys_wait_h';
 require overload;
 
-our $threads_avail = eval "use threads; use threads::shared; 1";
+our $threads_avail = $threads::threads;
 if (defined $ENV{PATRO_THREADS}) {
     no warnings 'redefine';
     $threads_avail = $ENV{PATRO_THREADS};
-}
-if ($threads_avail) {
-    require Patro::LeumJelly;
-    Patro::LeumJelly->import;
-    Patro::LeumJelly::extend_threads_shared();
 }
 
 *sxdiag = sub {};
@@ -80,7 +75,7 @@ sub new {
 	    $DB::single = 1;
 	    
 	    eval { $_ = threads::shared::shared_clone($_) };
-	    if ($@ =~ /CODE/) {
+	    if ($@ =~ /CODE|GLOB/) {
 		require Patro::LeumJelly;
 		warn "I am really surprised to see this message";
 		warn $@;
@@ -103,6 +98,8 @@ sub new {
 	my $ref = CORE::ref($o);
 	if ($ref eq 'threadsx::shared::code') {
 	    $ref = $reftype = 'CODE*';
+	} elsif ($ref eq 'threadsx::shared::glob') {
+	    $ref = $reftype = 'GLOB';
 	}
 	my $store = {
 	    ref => $ref,
@@ -110,7 +107,7 @@ sub new {
 	    id => $num
 	};
 	if (overload::Overloaded($o)) {
-	    if ($ref ne 'CODE' && $ref ne 'CODE*') {
+	    if ($ref ne 'CODE' && $ref ne 'CODE*' && $ref ne 'GLOB') {
 		$store->{overload} = _overloads($o);
 	    }
 	}
@@ -124,6 +121,14 @@ sub new {
     $self->{config} = $self->config;
     $self->start_server;
     push @SERVERS, $self;
+    if (@SERVERS == 1) {
+	eval q~END {
+            if ($Patro::Server::threads_avail) {
+                $_->detach for threads->list(threads::running);
+	    }
+	}~;
+    }
+    ::xdiag("added END code to detach!");
     return $self;
 }
 
@@ -563,6 +568,12 @@ sub process_request {
 	return $self->process_request_OVERLOAD($obj,$command,$args,$ctx);
     }
 
+    elsif ($topic eq 'HANDLE') {
+	my $obj = $self->{obj}{$id};
+	return $self->process_request_HANDLE(
+	    $obj,$command,$ctx,$has_args,$args);
+    }
+
     else {
 	return $self->error_response(
 	    __PACKAGE__,": unrecognized topic '$topic'");
@@ -725,6 +736,42 @@ sub process_request_SCALAR {
     die "topic 'SCALAR': command '$command' not recognized";
 }
 
+sub process_request_HANDLE {
+    my ($self,$fh,$command,$context,$has_args,$args) = @_;
+    if ($command eq 'PRINT') {
+	::xdiag("Printing ",$args," to ",$fh);
+	my $z = print {*$fh} @$args;
+	::xdiag("print result: $z");
+	return $self->scalar_response($z);
+    } elsif ($command eq 'PRINTF') {
+	if ($has_args) {
+	    my $template = shift @$args;
+	    my $z = printf {$fh} $template, @$args;
+	    return $self->scalar_response($z);
+	} else {
+	    my $z = printf {$fh} "";
+	    return $self->scalar_response($z);
+	}
+    } elsif ($command eq 'WRITE') {
+	if (@$args < 2) {
+	    return $self->error_response("Not enough arguments for syswrite");
+	}
+	return $self->scalar_response(syswrite $fh, $args->[0],
+				      $args->[1] // undef, $args->[2] // undef);
+    } elsif ($command eq 'READLINE') {
+    } elsif ($command eq 'GETC') {
+    } elsif ($command eq 'READ') {
+    } elsif ($command eq 'CLOSE') {
+    } elsif ($command eq 'BINMODE') {
+    } elsif ($command eq 'OPEN') {
+    } elsif ($command eq 'EOF') {
+    } elsif ($command eq 'FILENO') {
+    } elsif ($command eq 'SEEK') {
+    } elsif ($command eq 'TELL') {
+    }
+    return $self->error_response("tied HANDLE function '$command' not found");
+}
+
 # we should not send any serialized references back to the client.
 # replace any references in the response with an
 # object id.
@@ -733,9 +780,14 @@ sub patrol {
     sxdiag("patrol: called on: ",defined($obj) ? "$obj" : "<undef>");
     return $obj unless ref($obj);
 
-    if ($threads_avail && ref($obj) eq 'CODE') {
-	$obj = threadsx::shared::code->new($obj);
-	sxdiag("patrol: coderef converted");
+    if ($threads_avail) {
+	if (ref($obj) eq 'CODE') {
+	    $obj = threadsx::shared::code->new($obj);
+	    sxdiag("patrol: coderef converted");
+	} elsif (ref($obj) eq 'GLOB') {
+	    $obj = threadsx::shared::glob->new($obj);
+	    sxdiag("patrol: glob converted");
+	}
     }
 
     my $id = do {
@@ -750,6 +802,9 @@ sub patrol {
 	if ($ref eq 'threadsx::shared::code') {
 	    $ref = 'CODE';
 	    $reftype = 'CODE';
+	} elsif ($ref eq 'threadsx::shared::glob') {
+	    $ref = 'GLOB';
+	    $reftype = 'GLOB';
 	} else {
 	    $reftype = reftype($obj);
 	}

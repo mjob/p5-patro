@@ -42,16 +42,11 @@ sub import {
 				} : $_ } @_)
 	    };
 	    push @EXPORT, 'ok_threaded', 'xjoin';
-	    eval q~END {
-	        if ($Patro::Server::threads_avail) {
-	            $_->detach for threads->list(threads::running);
-	        }
-	    }~;
 	}
     }
-    if (eval "use threads;use threads::shared;1") {
-	Patro::LeumJelly::extend_threads_shared();
-    }
+
+    eval "use threads;1";
+    eval "use threadsx::shared";
     Patro->export_to_level(1, 'Patro', @args, @EXPORT);
 }
 

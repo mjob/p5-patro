@@ -8,6 +8,7 @@ use Carp ();
 use overload
     '@{}' => sub { ${$_[0]}->{array} },
     '%{}' => sub { ${$_[0]}->{hash} },
+    '*{}' => sub { ${$_[0]}->{handle} },
     'nomethod' => \&Patro::LeumJelly::overload_handler,
     ;
 
@@ -144,6 +145,47 @@ sub Patro::Tie::HASH::EXISTS { return shift->__('EXISTS',1,@_) }
 sub Patro::Tie::HASH::FIRSTKEY { return shift->__('FIRSTKEY',1,@_) }
 sub Patro::Tie::HASH::NEXTKEY { return shift->__('NEXTKEY',1,@_) }
 sub Patro::Tie::HASH::SCALAR { return shift->__('SCALAR',1) }
+
+############################################################
+
+# tie class for GLOB proxy object. Operations on the proxy object
+# are forwarded to the server
+
+sub Patro::Tie::HANDLE::TIEHANDLE {
+    my ($pkg,$proxy) = @_;
+    return bless { obj => $proxy, id => $proxy->{id} }, $pkg;
+}
+
+sub Patro::Tie::HANDLE::__ {
+    my ($tied,$name,$context,@args) = @_;
+    if (!defined($context)) {
+	$context = defined(wantarray) ? 1 + wantarray : 0;
+    }
+    return Patro::LeumJelly::proxy_request(
+	$tied->{obj},
+	{ topic => 'HANDLE',
+	  command => $name,
+	  context => $context,
+	  has_args => @args > 0,
+	  args => [ @args ],
+	  id => $tied->{id} } );
+}
+
+sub Patro::Tie::HANDLE::PRINT { return shift->__('PRINT',1,@_?@_:$_) }
+sub Patro::Tie::HANDLE::PRINTF { return shift->__('PRINTF',1,@_?@_:$_) }
+sub Patro::Tie::HANDLE::WRITE { return shift->__('WRITE',1,@_) }
+sub Patro::Tie::HANDLE::READLINE { return shift->__('READLINE',undef,@_) }
+sub Patro::Tie::HANDLE::GETC { return shift->__('GETC',1,@_) }
+sub Patro::Tie::HANDLE::READ { return shift->__('READ',1,@_) }
+sub Patro::Tie::HANDLE::CLOSE { return shift->__('CLOSE',1,@_) }
+sub Patro::Tie::HANDLE::BINMODE { return shift->__('BINMODE',1,@_) }
+sub Patro::Tie::HANDLE::OPEN { return shift->__('OPEN',1,@_) }
+sub Patro::Tie::HANDLE::EOF { return shift->__('EOF',1,@_) }
+sub Patro::Tie::HANDLE::FILENO { return shift->__('FILENO',1,@_) }
+sub Patro::Tie::HANDLE::SEEK { return shift->__('SEEK',1,@_) }
+sub Patro::Tie::HANDLE::TELL { return shift->__('TELL',1,@_) }
+sub Patro::Tie::HANDLE:: { return shift->__('',1,@_) }
+
 
 ############################################################
 
