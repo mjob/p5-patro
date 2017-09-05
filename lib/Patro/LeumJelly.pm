@@ -91,7 +91,7 @@ sub getproxy {
 		    args => [ @_ ],
 		    command => 'invoke',
 		    id => $proxy->{id}
-		} );
+		}, @_ );
 	};
 	return bless \$proxy, 'Patro::N3';
     }
@@ -110,7 +110,9 @@ sub getproxy {
 
 # make a request through a Patro::N's client, return the response
 sub proxy_request {
-    my ($proxy,$request) = @_;
+    my $proxy = shift;
+    my $request = shift;
+
     my $socket = $proxy->{socket};
     if (!defined $request->{context}) {
 	$request->{context} = defined(wantarray) ? 1 + wantarray : 0;
@@ -156,7 +158,12 @@ sub proxy_request {
     # before returning, handle side effects
     if ($resp->{out}) {
 	# the remote call updated arguments
-	# ...
+	croak unless CORE::ref($resp->{out}) eq 'ARRAY';
+	for (my $i=0; $i<@{$resp->{out}}; ) {
+	    my $index = $resp->{out}[$i++];
+	    my $val = $resp->{out}[$i++];
+	    $_[$index] = $val;
+	}
     }
     if (defined $resp->{errno}) {
 	# the remote call set $!

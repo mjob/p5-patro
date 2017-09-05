@@ -1,6 +1,22 @@
 package Patro;
 use strict;
 use warnings;
+
+BEGIN {
+    *CORE::GLOBAL::read = sub (*\$$;$) {
+	if (CORE::ref($_[0]) eq 'Patro::N5') {
+	    $Patro::sysread_read_flag = 'read';
+	}
+	CORE::read($_[0], $_[1], $_[2], $_[3] || 0);
+    };
+    *CORE::GLOBAL::sysread = sub (*\$$;$) {
+	if (CORE::ref($_[0]) eq 'Patro::N5') {
+	    $Patro::sysread_read_flag = 'sysread';
+	}
+	CORE::sysread($_[0], $_[1], $_[2], $_[3] || 0);
+    };
+}
+
 use Patro::LeumJelly;
 use Scalar::Util;
 use Data::Dumper;

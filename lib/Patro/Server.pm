@@ -732,9 +732,7 @@ sub process_request_SCALAR {
 
 sub process_request_HANDLE {
     my ($self,$obj,$command,$context,$has_args,$args) = @_;
-    ::xdiag("Server: proc_req_HANDLE input=",[@_[1..$#_]]);
     my $fh = ref($obj) eq 'threadsx::shared::glob' ? $obj->glob : $obj;
-    ::xdiag("Server: proc_req_HANDLE input=",[$fh,@_[2..$#_]]);
     if ($command eq 'PRINT') {
 	my $z = print {$fh} @$args;
 	return $self->scalar_response($z);
@@ -766,28 +764,54 @@ sub process_request_HANDLE {
 	local $! = 0;
 	my $ch = getc($fh);
 	return $self->scalar_response($ch);
-    } elsif ($command eq 'READ') {
+
+    # 'READ', 'SYSREAD', and 'READ?' correspond to read/sysread calls
+    # from the proxy. We try to guess which one was intended.
+    } elsif ($command eq 'READ?') {
 	if (@$args < 2) {
-	    # I don't think we can get here through the proxy
 	    return $self->error_response("Not enough arguments for read");
 	}
 	my $bufref = \$args->[0];
 	my (undef, $len, $off) = @$args;
 	my $z;
-	$off ||= 0;
 
 	if (fileno($fh) >= 0) {
-	    $z = sysread $fh, $$bufref, $len, $off;
+	    $z = sysread $fh, $$bufref, $len, $off || 0;
 	} else {
 	    # sysread doesn't work, for example, on file handles opened
 	    # from a reference to a scalar
-	    $z = read $fh, $$bufref, $len, $off;
+	    $z = read $fh, $$bufref, $len, $off || 0;
 	}
 	if ($@) {
 	    return $self->error_response($@);
 	} else {
 	    return $self->scalar_response($z, { out => [1,$$bufref] })
 	}
+    } elsif ($command eq 'READ') {
+	if (@$args < 2) {
+	    return $self->error_response("Not enough arguments for read");
+	}
+	my $bufref = \$args->[0];
+	my (undef, $len, $off) = @$args;
+	my $z = read $fh, $$bufref, $len, $off || 0;
+	if ($@) {
+	    return $self->error_response($@);
+	} else {
+	    return $self->scalar_response($z, { out => [1,$$bufref] })
+	}
+    } elsif ($command eq 'SYSREAD') {
+	if (@$args < 2) {
+	    return $self->error_response("Not enough arguments for read");
+	}
+	my $bufref = \$args->[0];
+	my (undef, $len, $off) = @$args;
+	my $z = sysread $fh, $$bufref, $len, $off || 0;
+	if ($@) {
+	    return $self->error_response($@);
+	} else {
+	    return $self->scalar_response($z, { out => [1,$$bufref] })
+	}
+
     } elsif ($command eq 'EOF') {
 	return $self->scalar_response( eof($fh) );
     } elsif ($command eq 'FILENO') {

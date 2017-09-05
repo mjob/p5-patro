@@ -16,11 +16,11 @@ use overload
 foreach my $umethod (keys %UNIVERSAL::) {
     no strict 'refs';
     *{$umethod} = sub {
-	my ($proxy,@args) = @_;
+	my $proxy = shift;
 	my $context = defined(wantarray) ? 1 + wantarray : 0;
 	return Patro::LeumJelly::proxy_request( $$proxy,
 	    { id => $$proxy->{id}, topic => 'METHOD', command => $umethod,
-	      has_args => @args > 0, args => [ @args ], context => $context } );
+	      has_args => @_ > 0, args => [ @_ ], context => $context }, @_ );
     };
 }
 
@@ -41,7 +41,7 @@ sub AUTOLOAD {
 	  has_args => $has_args,
 	  args => $args,
 	  context => $context,
-	  _autoload => 1 } );
+	  _autoload => 1 }, @_ );
 }
 
 sub DESTROY {
@@ -78,7 +78,9 @@ sub Patro::Tie::HANDLE::TIEHANDLE {
 }
 
 sub Patro::Tie::HANDLE::__ {
-    my ($tied,$name,$context,@args) = @_;
+    my $tied = shift;
+    my $name = shift;
+    my $context = shift;
     if (!defined($context)) {
 	$context = defined(wantarray) ? 1 + wantarray : 0;
     }
@@ -87,9 +89,9 @@ sub Patro::Tie::HANDLE::__ {
 	{ topic => 'HANDLE',
 	  command => $name,
 	  context => $context,
-	  has_args => @args > 0,
-	  args => [ @args ],
-	  id => $tied->{id} } );
+	  has_args => @_ > 0,
+	  args => [ @_ ],
+	  id => $tied->{id} }, @_ );
 }
 
 sub Patro::Tie::HANDLE::PRINT { return shift->__('PRINT',1,@_?@_:$_) }
@@ -97,7 +99,17 @@ sub Patro::Tie::HANDLE::PRINTF { return shift->__('PRINTF',1,@_?@_:$_) }
 sub Patro::Tie::HANDLE::WRITE { return shift->__('WRITE',1,@_) }
 sub Patro::Tie::HANDLE::READLINE { return shift->__('READLINE',undef,@_) }
 sub Patro::Tie::HANDLE::GETC { return shift->__('GETC',1,@_) }
-sub Patro::Tie::HANDLE::READ { return shift->__('READ',1,@_) }
+sub Patro::Tie::HANDLE::READ {
+    my $name = 'READ?';
+    if ($Patro::sysread_read_flag) {
+	if ($Patro::sysread_read_flag eq 'read') {
+	    $name = 'READ';
+	} elsif ($Patro::sysread_read_flag eq 'sysread') {
+	    $name = 'SYSREAD';
+	}
+    }
+    return shift->__($name,1,@_);
+}
 sub Patro::Tie::HANDLE::CLOSE { return shift->__('CLOSE',1,@_) }
 sub Patro::Tie::HANDLE::BINMODE { return shift->__('BINMODE',1,@_) }
 sub Patro::Tie::HANDLE::OPEN { return shift->__('OPEN',1,@_) }

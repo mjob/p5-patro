@@ -50,6 +50,11 @@ ok($x eq "123In ", 'read on proxy filehandle updates scalar')
     or diag "\$x=$x";
 
 my $xx = "123456789";
+$z = sysread $p4, $xx, 3, 3;
+ok($z == 0, 'sysread on proxy fh, opened from scalar, returns 0');
+ok($xx eq '123456789', 'read buffer unchanged');
+
+my $xx = "123456789";
 $z = read $p4, $x, 3, 3;
 ok($z == 3, 'read on proxy filehandle (opened from scalar');
 ok($x eq "123In ", "read on proxy fh (opened from scalar) updates scalar");
