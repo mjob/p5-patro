@@ -131,6 +131,7 @@ sub proxy_request {
 	    }
 	}
     }
+    $request->{inputs} = [ @_ ];
 
     my $sreq = serialize($request);
     my $resp;
@@ -156,6 +157,14 @@ sub proxy_request {
     }
 
     # before returning, handle side effects
+    if ($resp->{outref}) {
+	croak unless CORE::ref($resp->{outref}) eq 'ARRAY';
+	for (my $i=0; $i<@{$resp->{outref}}; ) {
+	    my $index = $resp->{outref}[$i++];
+	    my $val = $resp->{outref}[$i++];
+	    ${ $_[$index] } = $val;
+	}
+    }
     if ($resp->{out}) {
 	# the remote call updated arguments
 	croak unless CORE::ref($resp->{out}) eq 'ARRAY';

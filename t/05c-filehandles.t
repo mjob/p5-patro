@@ -43,8 +43,8 @@ ok($c, 'got client for remote obj');
 my $THREADED = $c->{config}{style} eq 'threaded';
 
 
-my $x = "123456789";
-my $z = read $p5, $x, 3, 3;
+my $x = "123456789ABCD";
+my $z = read $p5, $x, 3;
 ok($z == 3, 'read on proxy filehandle') or diag "\$z=$z";
 ok($x eq "123In ", 'read on proxy filehandle updates scalar')
     or diag "\$x=$x";
