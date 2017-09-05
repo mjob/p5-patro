@@ -1,14 +1,14 @@
-package Patro::N1;
+package Patro::N4;
 use strict;
 use warnings;
 
-# Patro::N1. Proxy class for HASH type references
+# Patro::N4. Proxy class for ARRAY type references
 
 # we must keep this namespace very clean
 use Carp ();
 
 use overload
-    '%{}' => sub { ${$_[0]}->{hash} },
+    '@{}' => sub { ${$_[0]}->{array} },
     'nomethod' => \&Patro::LeumJelly::overload_handler,
     ;
 
@@ -25,7 +25,7 @@ foreach my $umethod (keys %UNIVERSAL::) {
 }
 
 sub AUTOLOAD {
-    my $method = $Patro::N1::AUTOLOAD;
+    my $method = $Patro::N4::AUTOLOAD;
     $method =~ s/.*:://;
 
     my $self = shift;
@@ -72,22 +72,21 @@ sub DESTROY {
 
 ############################################################
 
-# tie class for hash proxy object. Operations on the proxy
+# tie class for array proxy object. Operations on the proxy object
 # are forwarded to the remote server
 
-sub Patro::Tie::HASH::TIEHASH {
+sub Patro::Tie::ARRAY::TIEARRAY {
     my ($pkg,$proxy) = @_;
     return bless { obj => $proxy, id => $proxy->{id} }, $pkg;
 }
 
-sub Patro::Tie::HASH::__ {
+sub Patro::Tie::ARRAY::__ {
     my ($tied,$name,$context,@args) = @_;
     if (!defined($context)) {
 	$context = defined(wantarray) ? 1 + wantarray : 0;
     }
-    return Patro::LeumJelly::proxy_request(
-	$tied->{obj},
-	{ topic => 'HASH',
+    return Patro::LeumJelly::proxy_request( $tied->{obj},
+	{ topic => 'ARRAY',
 	  command => $name,
 	  context => $context,
 	  has_args => @_ > 0,
@@ -95,13 +94,24 @@ sub Patro::Tie::HASH::__ {
 	  id => $tied->{id} } );
 }
 
-sub Patro::Tie::HASH::FETCH { return shift->__('FETCH',1,@_) }
-sub Patro::Tie::HASH::STORE { return shift->__('STORE',0,@_) }
-sub Patro::Tie::HASH::DELETE { return shift->__('DELETE',1,@_) }
-sub Patro::Tie::HASH::CLEAR { return shift->__('CLEAR',0) }
-sub Patro::Tie::HASH::EXISTS { return shift->__('EXISTS',1,@_) }
-sub Patro::Tie::HASH::FIRSTKEY { return shift->__('FIRSTKEY',1,@_) }
-sub Patro::Tie::HASH::NEXTKEY { return shift->__('NEXTKEY',1,@_) }
-sub Patro::Tie::HASH::SCALAR { return shift->__('SCALAR',1) }
+sub Patro::Tie::ARRAY::FETCH { return shift->__('FETCH',1,@_) }
+sub Patro::Tie::ARRAY::STORE { return shift->__('STORE',0,@_) }
+sub Patro::Tie::ARRAY::FETCHSIZE { return shift->__('FETCHSIZE',1) }
+sub Patro::Tie::ARRAY::STORESIZE { return shift->__('STORESIZE',1,@_) }
+sub Patro::Tie::ARRAY::DELETE    { return shift->__('DELETE',1,@_) }
+sub Patro::Tie::ARRAY::CLEAR     { return shift->__('CLEAR',0) }
+sub Patro::Tie::ARRAY::EXISTS    { return shift->__('EXISTS',1,@_) }
+sub Patro::Tie::ARRAY::PUSH      { return shift->__('PUSH',1,@_) }
+sub Patro::Tie::ARRAY::POP       { return shift->__('POP',1) }
+sub Patro::Tie::ARRAY::SHIFT     { return shift->__('SHIFT',1) }
+sub Patro::Tie::ARRAY::UNSHIFT   { return shift->__('UNSHIFT',1,@_) }
+sub Patro::Tie::ARRAY::SPLICE {
+    my $tied = shift;
+    my $off = @_ ? shift : 0;
+    my $len = @_ ? shift : 'undef';
+    return $tied->__('SPLICE',wantarray ? 2:1,$off,$len,@_);
+}
+
+############################################################
 
 1;

@@ -15,7 +15,7 @@ ok($cfgstr, 'got string representation of Patro config');
 
 my ($r1) = Patro->new($cfgstr)->getProxies;
 ok($r1, 'client as boolean, loaded from config string');
-is(CORE::ref($r1), 'Patro::N1', 'client ref');
+is(CORE::ref($r1), 'Patro::N4', 'client ref');
 is(Patro::ref($r1), 'ARRAY', 'remote ref');
 is(Patro::reftype($r1), 'ARRAY', 'remote reftype');
 
@@ -44,7 +44,7 @@ is($r1->[7], 2, 'unshift to remote array');
 is(pop @$r1, 18, 'pop from remote array');
 
 my $r6 = $r1->[10];
-is(CORE::ref($r6), 'Patro::N1', 'proxy handle for nested remote obj');
+is(CORE::ref($r6), 'Patro::N4', 'proxy handle for nested remote obj');
 is(Patro::ref($r6), 'ARRAY', 'got remote ref type');
 
 done_testing;

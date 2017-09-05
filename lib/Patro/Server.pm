@@ -8,12 +8,7 @@ use Scalar::Util 'reftype';
 use POSIX ':sys_wait_h';
 require overload;
 
-our $threads_avail = $threads::threads;
-if (defined $ENV{PATRO_THREADS}) {
-    no warnings 'redefine';
-    $threads_avail = $ENV{PATRO_THREADS};
-}
-
+our $threads_avail;
 *sxdiag = sub {};
 if ($ENV{PATRO_SERVER_DEBUG}) {
     *sxdiag = *::xdiag;
@@ -737,7 +732,9 @@ sub process_request_SCALAR {
 
 sub process_request_HANDLE {
     my ($self,$obj,$command,$context,$has_args,$args) = @_;
+    ::xdiag("Server: proc_req_HANDLE input=",[@_[1..$#_]]);
     my $fh = ref($obj) eq 'threadsx::shared::glob' ? $obj->glob : $obj;
+    ::xdiag("Server: proc_req_HANDLE input=",[$fh,@_[2..$#_]]);
     if ($command eq 'PRINT') {
 	my $z = print {$fh} @$args;
 	return $self->scalar_response($z);
@@ -777,11 +774,14 @@ sub process_request_HANDLE {
 	my $bufref = \$args->[0];
 	my (undef, $len, $off) = @$args;
 	my $z;
+	$off ||= 0;
 
-	if (!defined $off) {
-	    $z = eval { sysread $fh, $$bufref, $len };
+	if (fileno($fh) >= 0) {
+	    $z = sysread $fh, $$bufref, $len, $off;
 	} else {
-	    $z = eval { sysread $fh, $$bufref, $len, $off };
+	    # sysread doesn't work, for example, on file handles opened
+	    # from a reference to a scalar
+	    $z = read $fh, $$bufref, $len, $off;
 	}
 	if ($@) {
 	    return $self->error_response($@);
@@ -889,6 +889,14 @@ sub error_response {
 }
 
 sub TEST_MODE {
+    if ($INC{'perl5db.pl'}) {
+	::xdiag("TEST_MODE adjusted for debugging");
+	$OPTS{keep_alive} = 3600;
+	$OPTS{fincheck_freq} = 3500;
+	$OPTS{idle_timeout} = 3600;
+	alarm 9999;
+	return;
+    }
     $OPTS{keep_alive} = 2;
     $OPTS{fincheck_freq} = 2;
     $OPTS{idle_timeout} = 1;

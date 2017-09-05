@@ -19,6 +19,7 @@ sub import {
 	if ($tag eq ':test') {
 	    require Patro::Server;
 	    Patro::Server->TEST_MODE;
+
 	    # some tests will check if the remote object has changed
 	    # after being manipulated by the proxy. This can only
 	    # happen with a threaded server (or with certain objects
@@ -47,6 +48,11 @@ sub import {
 
     eval "use threads;1";
     eval "use threadsx::shared";
+    $Patro::Server::threads_avail = $threads::threads;
+    if (defined $ENV{PATRO_THREADS}) {
+	no warnings 'redefine';
+	$Patro::Server::threads_avail = $ENV{PATRO_THREADS};
+    }
     Patro->export_to_level(1, 'Patro', @args, @EXPORT);
 }
 

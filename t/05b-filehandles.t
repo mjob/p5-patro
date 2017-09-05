@@ -34,7 +34,7 @@ ok($cfgstr, 'got string representation of Patro config');
 
 my ($p2,$p3) = Patro->new($cfgstr)->getProxies;
 ok($p2, 'client as boolean, loaded from config string');
-is(CORE::ref($p2), 'Patro::N1', 'client ref');
+is(CORE::ref($p2), 'Patro::N5', 'client ref');
 is(Patro::ref($p2), 'GLOB', 'remote ref');
 is(Patro::reftype($p2), 'GLOB', 'remote reftype');
 

@@ -2,6 +2,8 @@ package Patro::N2;
 use strict;
 use warnings;
 
+# Patro::N2. Proxy class for SCALAR type references
+
 # we must keep this namespace very clean
 use Carp ();
 

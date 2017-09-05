@@ -8,9 +8,16 @@ use MIME::Base64 ();
 
 our $VERSION = '0.12';
 
+my %proxyClasses = (
+    'Patro::N1' => 0,    # HASH
+    'Patro::N2' => 1,    # SCALAR
+    'Patro::N3' => 0,    # CODE
+    'Patro::N4' => 0,    # ARRAY
+    'Patro::N5' => 0 );  # GLOB
+
 sub isProxyRef {
     my ($pkg) = @_;
-    return $pkg eq 'Patro::N1' || $pkg eq 'Patro::N2' || $pkg eq 'Patro::N3';
+    return defined $proxyClasses{$pkg};
 }
 
 sub handle {
@@ -39,7 +46,7 @@ sub deserialize {
     }
 }
 
-# return a Patro::N1 or Patro::N2 object appropriate for the
+# return a Patro::Nx object appropriate for the
 # object metadata (containing id, ref, reftype values) and client.
 sub getproxy {
     my ($objdata,$client) = @_;
@@ -59,10 +66,10 @@ sub getproxy {
     }
 
     if ($proxy->{reftype} eq 'ARRAY') {
-	require Patro::N1;
+	require Patro::N4;
 	tie my @a, 'Patro::Tie::ARRAY', $proxy;
 	$proxy->{array} = \@a;
-	return bless \$proxy, 'Patro::N1';
+	return bless \$proxy, 'Patro::N4';
     }
 
     if ($proxy->{reftype} eq 'HASH') {
@@ -90,12 +97,12 @@ sub getproxy {
     }
 
     if ($proxy->{reftype} eq 'GLOB') {
-	require Patro::N1;
+	require Patro::N5;
 	require Symbol;
 	my $fh = Symbol::gensym();
 	tie *$fh, 'Patro::Tie::HANDLE', $proxy;
 	$proxy->{handle} = \*$fh;
-	return bless \$proxy, 'Patro::N1';
+	return bless \$proxy, 'Patro::N5';
     }
 
     croak "unsupported remote object reftype '$objdata->{reftype}'";
@@ -142,8 +149,28 @@ sub proxy_request {
 	croak $resp->{error};
     }
     if (exists $resp->{disconnect_ok}) {
+	::xdiag("client: disconnect_ok received. Response is ",$resp);
 	return $resp;
     }
+
+    # before returning, handle side effects
+    if ($resp->{out}) {
+	# the remote call updated arguments
+	# ...
+    }
+    if (defined $resp->{errno}) {
+	# the remote call set $!
+	$! = $resp->{errno};
+    }
+    if (defined $resp->{child_error}) {
+	# the remote call set $?
+	$? = $resp->{child_error};
+    }
+    if (defined $resp->{eval_error}) {
+	# the remote call set $@
+	$@ = $resp->{eval_error};
+    }
+
     if ($resp->{context} == 0) {
 	return;
     }
@@ -198,7 +225,7 @@ sub depatrol {
     return $obj;
 }
 
-# overload handling for Patro::N1 and Patro::N2
+# overload handling for Patro::N1, Patro::N2, and Patro::N4. N3 and N5 too?
 
 my %numeric_ops = map { $_ => 1 }
 qw# + - * / % ** << >> += -= *= /= %= **= <<= >>= <=> < <= > >= == != ^ ^=
