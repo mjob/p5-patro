@@ -49,15 +49,25 @@ ok($z == 3, 'read on proxy filehandle') or diag "\$z=$z";
 ok($x eq "123In ", 'read on proxy filehandle updates scalar')
     or diag "\$x=$x";
 
+# if defined(&CORE::read) is false, this sysread call will be
+# treated as a read call on the server (and should succeed)
+
 my $xx = "123456789";
 $z = sysread $p4, $xx, 3, 3;
-ok(!$z, 'sysread on proxy fh, opened from scalar, returns 0');
-ok($xx eq '123456789', 'read buffer unchanged');
+if (defined(&CORE::read)) {
+    ok(!$z, 'sysread on proxy fh, opened from scalar, returns 0')
+	or diag("\$z is $z, expected 0 on proxy sysread, fh opened to scalar");
+    ok($xx eq '123456789', 'read buffer unchanged');
+} else {
+    ok($z == 3, 'sysread on proxy fh, opened from scalar, treated as read');
+    ok($xx eq '123In ', "read buffer changed");
+}
 
 $xx = "123456789";
 $z = read $p4, $xx, 3, 3;
 ok($z == 3, 'read on proxy filehandle (opened from scalar');
-ok($xx eq "123In ", "read on proxy fh (opened from scalar) updates scalar");
+ok($xx eq "123In " || $xx eq "123a h",
+   "read on proxy fh (opened from scalar) updates scalar");
 
 done_testing;
 
