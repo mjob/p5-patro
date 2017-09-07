@@ -7,6 +7,8 @@ sub foo::sqr { $_[1] *= $_[1] ; 23 };
 
 sub sqr { $_[0] *= $_[0]; 19 }
 
+sub foo::enoent { open my $zh, "<", "/a/bogus:file/that/doesn't/exist"; 11 }
+
 my $c1 = \&sqr;
 my $c2 = bless {}, 'foo';
 my ($p1,$p2) = Patro->new( patronize($c1,$c2) )->getProxies;
@@ -24,5 +26,10 @@ $x = 6;
 $z = $p2->sqr($x);
 ok($z==23, "return value ok");
 ok($x==36, "side effect ok");
+
+local $! = 0;
+ok($! == 0, 'errno test init');
+ok(11 == $p2->enoent(), 'proxy method call');
+ok($!, '... that sets $!');
 
 done_testing;

@@ -61,6 +61,24 @@ ok($line eq "Eye of Sauron\n", 'received printf output');
 ok(fileno($p1) == fileno($f1), 'fileno of proxy same as fileno of remote fh');
 ok(tell($p1) > 0, 'tell of output proxy filehandle should be >0');
 
+
+seek $th, tell($p1), 0;   # seek readhandle to writehandle
+
+ok(binmode($p1), 'simple binmode ok');
+print $p1 "q\n";
+my $c0 = getc($th) . getc($th);
+ok($c0 eq "q\cJ", 'simple binmode applied');
+
+ok(binmode($p1,":crlf"), 'binmode with layer');
+print $p1 "Z\n";
+my $c1 = getc($th) . getc($th) . getc($th);
+ok($c1 eq "Z\cM\cJ", 'binmode :crlf applied');
+
+local $! = 0;
+ok(!binmode($p1,":BogusLayer"), 'binmode with bogus layer failed');
+ok($!, '$! set on bad binmode call');
+
+
 done_testing;
 
 END {

@@ -515,6 +515,7 @@ sub process_request {
 	my @r;
 	my @orig_args = $has_args ? @$args : ();
 	my $obj = $self->{obj}{$id};
+	local $! = 0;
 	if ($ctx < 2) {
 	    @r = scalar eval { $has_args ? $obj->$command(@$args)
 				   : $obj->$command };
@@ -522,8 +523,9 @@ sub process_request {
 	    @r = eval { $has_args ? $obj->$command(@$args)
 			          : $obj->$command };
 	}
+	my $errno = 0 + $!;
 	if ($@) {
-	    return $self->error_response($@);
+	    return $self->error_response($@, bless{errno=>$errno},'.Patroclus');
 	}
 #	::xdiag("Checking for arg i/o mismatches",
 #		\@orig_args, $args);
@@ -543,6 +545,11 @@ sub process_request {
 	my @addl;
 	if (@out || @outref) {
 	    @addl = (bless { out => \@out, outref => \@outref }, '.Patroclus');
+	    if ($errno) {
+		$addl[0]{errno} = $errno;
+	    }
+	} elsif ($errno) {
+	    @addl = (bless { errno => $errno }, '.Patroclus');
 	}
 	if ($ctx >= 2) {
 	    return $self->list_response(@r, @addl);
@@ -842,12 +849,25 @@ sub process_request_HANDLE {
 	my $z = tell($fh);
 	return $self->scalar_response($z);
     } elsif ($command eq 'BINMODE') {
+	local $! = 0;
+	my $z;
+	if (@$args) {
+	    $z = binmode $fh, $args->[0];
+	} else {
+	    $z = binmode $fh;
+	}
+	if (!$z) {
+	    ::xdiag("Server: bad binmode call, \$!=$!");
+	    return $self->scalar_response($z, { errno => 0+$! });
+	} else {
+	    return $self->scalar_response($z);
+	}
     } elsif ($command eq 'CLOSE') {
     } elsif ($command eq 'OPEN') {
     }
     return $self->error_response("tied HANDLE function '$command' not found");
 }
-
+    
 # we should not send any serialized references back to the client.
 # replace any references in the response with an
 # object id.
@@ -930,6 +950,10 @@ sub list_response {
 
 sub error_response {
     my ($self,@msg) = @_;
+    if (@msg && CORE::ref($msg[-1]) eq '.Patroclus') {
+	my $val = pop @msg;
+	return { error => join('',@msg), %$val };
+    }
     return { error => join('',@msg) };
 }
 
