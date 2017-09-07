@@ -1,22 +1,6 @@
 package Patro;
 use strict;
 use warnings;
-
-BEGIN {
-    *CORE::GLOBAL::read = sub (*\$$;$) {
-	if (CORE::ref($_[0]) eq 'Patro::N5') {
-	    $Patro::sysread_read_flag = 'read';
-	}
-	CORE::read($_[0], $_[1], $_[2], $_[3] || 0);
-    };
-    *CORE::GLOBAL::sysread = sub (*\$$;$) {
-	if (CORE::ref($_[0]) eq 'Patro::N5') {
-	    $Patro::sysread_read_flag = 'sysread';
-	}
-	CORE::sysread($_[0], $_[1], $_[2], $_[3] || 0);
-    };
-}
-
 use Patro::LeumJelly;
 use Scalar::Util;
 use Data::Dumper;
@@ -26,6 +10,21 @@ use base 'Exporter';
 our @EXPORT = qw(patronize getProxies);
 
 our $VERSION = '0.12';
+
+BEGIN {
+    if (defined &CORE::read) {
+	*CORE::GLOBAL::read = sub (*\$$;$) {
+	    $Patro::read_sysread_flag = 'read';
+	    goto &CORE::read if defined &CORE::read;
+	};
+	*CORE::GLOBAL::sysread = sub (*\$$;$) {
+	    $Patro::read_sysread_flag = 'sysread';
+	    goto &CORE::sysread if defined &CORE::sysread;
+	};
+    } else {
+	$Patro::read_sysread_flag = 'read?';
+    }
+}
 
 sub import {
     my ($class, @args) = @_;

@@ -112,7 +112,6 @@ sub getproxy {
 sub proxy_request {
     my $proxy = shift;
     my $request = shift;
-
     my $socket = $proxy->{socket};
     if (!defined $request->{context}) {
 	$request->{context} = defined(wantarray) ? 1 + wantarray : 0;
@@ -131,7 +130,6 @@ sub proxy_request {
 	    }
 	}
     }
-    $request->{inputs} = [ @_ ];
 
     my $sreq = serialize($request);
     my $resp;
@@ -152,26 +150,19 @@ sub proxy_request {
 	croak $resp->{error};
     }
     if (exists $resp->{disconnect_ok}) {
-	::xdiag("client: disconnect_ok received. Response is ",$resp);
+#	::xdiag("client: disconnect_ok received. Response is ",$resp);
 	return $resp;
     }
 
     # before returning, handle side effects
-    if ($resp->{outref}) {
-	croak unless CORE::ref($resp->{outref}) eq 'ARRAY';
-	for (my $i=0; $i<@{$resp->{outref}}; ) {
-	    my $index = $resp->{outref}[$i++];
-	    my $val = $resp->{outref}[$i++];
-	    ${ $_[$index] } = $val;
-	}
-    }
-    if ($resp->{out}) {
-	# the remote call updated arguments
-	croak unless CORE::ref($resp->{out}) eq 'ARRAY';
+    if ($resp->{out} && ref($resp->{out}) eq 'ARRAY') {
 	for (my $i=0; $i<@{$resp->{out}}; ) {
 	    my $index = $resp->{out}[$i++];
 	    my $val = $resp->{out}[$i++];
-	    $_[$index] = $val;
+	    eval { $_[$index] = $val };
+	    if ($@) {
+		croak $@;
+	    }
 	}
     }
     if (defined $resp->{errno}) {

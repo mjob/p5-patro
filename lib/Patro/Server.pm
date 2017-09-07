@@ -27,7 +27,7 @@ sub new {
     my $opts = shift;
 
     my $host = $ENV{HOSTNAME} // qx(hostname) // "localhost";
-    if (eval "require Sys::HostAddr;1") {
+    if ($INC{'Sys/HostAddr.pm'}) {
 	my $host2 = Sys::HostAddr->new->main_ip;
 	$host = $host2 if $host2;
     }
@@ -426,9 +426,7 @@ sub serialize_response {
 }
 
 sub process_request {
-    my $self = shift;
-    my $request = shift;
-
+    my ($self, $request) = @_;
     croak "process_request: invalid non-scalar request" if ref($request);
 
     $request = Patro::LeumJelly::deserialize($request);
@@ -515,8 +513,8 @@ sub process_request {
 
     elsif ($topic eq 'METHOD') {
 	my @r;
+	my @orig_args = $has_args ? @$args : ();
 	my $obj = $self->{obj}{$id};
-	my @orig_args = @$args;
 	if ($ctx < 2) {
 	    @r = scalar eval { $has_args ? $obj->$command(@$args)
 				   : $obj->$command };
@@ -527,19 +525,19 @@ sub process_request {
 	if ($@) {
 	    return $self->error_response($@);
 	}
-	my (@out, @outref);
+#	::xdiag("Checking for arg i/o mismatches",
+#		\@orig_args, $args);
+	my (@out,@outref);
 	for (my $i=0; $i<@orig_args; $i++) {
-	    if ($args->[$i] ne $orig_args[$i]) {
-		push @out, $i, $args->[$i];
-	    }
-	    if (ref($orig_args[$i]) eq 'SCALAR') {
-		if (ref($args->[$i]) eq 'SCALAR' &&
-		    ${$args->[$i]} ne ${$orig_args[$i]}) {
+	    if ('SCALAR' eq (Scalar::Util::reftype($orig_args[$i]) // '')) {
+		if ('SCALAR' eq (Scalar::Util::reftype($args->[$i]) // '') &&
+		    ${$orig_args[$i]} ne ${$args->[$i]}) {
 		    push @outref, $i, ${$args->[$i]};
-		} elsif (ref($args->[$i]) eq '' &&
-			 $args->[$i] ne ${$orig_args[$i]}) {
+		} elsif (CORE::ref($args->[$i]) eq '') {
 		    push @outref, $i, $args->[$i];
 		}
+	    } elsif ($orig_args[$i] ne $args->[$i]) {
+		push @out, $i, $args->[$i];
 	    }
 	}
 	my @addl;
@@ -571,19 +569,17 @@ sub process_request {
 	if ($@) {
 	    return $self->error_response($@);
 	}
-	my (@out, @outref);
+	my (@out,@outref);
 	for (my $i=0; $i<@orig_args; $i++) {
-	    if ($args->[$i] ne $orig_args[$i]) {
-		push @out, $i, $args->[$i];
-	    }
-	    if (ref($orig_args[$i]) eq 'SCALAR') {
-		if (ref($args->[$i]) eq 'SCALAR' &&
-		    ${$args->[$i]} ne ${$orig_args[$i]}) {
+	    if ('SCALAR' eq (Scalar::Util::reftype($orig_args[$i]) // '')) {
+		if ('SCALAR' eq (Scalar::Util::reftype($args->[$i]) // '') &&
+		    ${$orig_args[$i]} ne ${$args->[$i]}) {
 		    push @outref, $i, ${$args->[$i]};
-		} elsif (ref($args->[$i]) eq '' &&
-			 $args->[$i] ne ${$orig_args[$i]}) {
+		} elsif (CORE::ref($args->[$i]) eq '') {
 		    push @outref, $i, $args->[$i];
 		}
+	    } elsif ($orig_args[$i] ne $args->[$i]) {
+		push @out, $i, $args->[$i];
 	    }
 	}
 	my @addl;
@@ -806,41 +802,28 @@ sub process_request_HANDLE {
 	local $! = 0;
 	my $ch = getc($fh);
 	return $self->scalar_response($ch);
-
-    # 'READ', 'SYSREAD', and 'READ?' correspond to read/sysread calls
-    # from the proxy. We try to guess which one was intended.
-    } elsif ($command eq 'READ' || $command eq 'SYSREAD' ||
-	     $command eq 'READ?') {
+    } elsif ($command eq 'READ' || $command eq 'READ?' ||
+	     $command eq 'SYSREAD') {
+	local $Patro::read_sysread_flag;  # don't clobber
 	if (@$args < 2) {
+	    # I don't think we can get here through the proxy
 	    return $self->error_response("Not enough arguments for read");
 	}
-	my ($bufref,$argref,$z);
-	if (ref($args->[0])) {
-	    $bufref = $args->[0];
-	    $argref = 0;
-	} else {
-	    $bufref = \$args->[0];
-	    $argref = 1;
-	}
-	my (undef, $len, $off) = @$args;
-
-	if ($command eq 'SYSREAD' ||
-	    ($command eq 'READ?' && fileno($fh) >= 0)) {
-	    $z = sysread *$fh, $bufref, $len, ($off || 0);
+	my ($buffer, $len, $off) = @$args;
+	my $z;
+	if ($command eq 'SYSREAD' || ($command eq 'READ?' && fileno($fh) >= 0)) {
+	    $z = sysread $fh, $buffer, $len, $off || 0;
 	} else {
 	    # sysread doesn't work, for example, on file handles opened
 	    # from a reference to a scalar
-	    $z = read *$fh, $bufref, $len, ($off || 0);
+	    $z = read $fh, $buffer, $len, $off || 0;
 	}
-	my @out;
-	if ($z) {
-	    @out = ( bless { outref => [0, $$bufref] }, '.Patroclus' );
-	    if ($argref) {
-		$out[0]{outref}[1] = $bufref;
-	    }
+	#::xdiag("READ results:",[$z,$buffer,$fh]);
+	if ($@) {
+	    return $self->error_response($@);
+	} else {
+	    return $self->scalar_response($z, { out => [0,$buffer] })
 	}
-	return $self->scalar_response($z, @out);
-
     } elsif ($command eq 'EOF') {
 	return $self->scalar_response( eof($fh) );
     } elsif ($command eq 'FILENO') {
@@ -917,7 +900,7 @@ sub patrol {
 
 sub void_response {
     my $addl = {};
-    if (@_ > 1 && ref($_[-1]) eq '.Patroclus') {
+    if (@_ > 0 && CORE::ref($_[-1]) eq '.Patroclus') {
 	$addl = pop @_;
     }
     return +{ context => 0, response => undef, %$addl };
@@ -935,13 +918,13 @@ sub scalar_response {
 sub list_response {
     my ($self,@val) = @_;
     my $addl = {};
-    if (@val && ref($val[-1]) eq '.Patroclus') {
+    if (@val && CORE::ref($val[-1]) eq '.Patroclus') {
 	$addl = pop @val;
     }
     return +{
 	context => 2,
 	response => \@val,
-	%$addl,
+	%$addl
     };
 }
 

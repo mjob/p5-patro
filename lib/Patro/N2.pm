@@ -16,11 +16,11 @@ use overload
 foreach my $umethod (keys %UNIVERSAL::) {
     no strict 'refs';
     *{$umethod} = sub {
-	my ($proxy,@args) = @_;
+	my $proxy = shift;
 	my $context = defined(wantarray) ? 1 + wantarray : 0;
 	return Patro::LeumJelly::proxy_request( $proxy,
 	    { id => $proxy->{id}, topic => 'METHOD', command => $umethod,
-	      has_args => @args > 0, args => [ @args ], context => $context } );
+	      has_args => @_ > 0, args => [ @_ ], context => $context }, @_ );
     };
 }
 
@@ -41,7 +41,7 @@ sub AUTOLOAD {
 	  has_args => $has_args,
 	  args => $args,
 	  context => $context,
-	  _autoload => 1 } );
+	  _autoload => 1 }, @_ );
 }
 
 sub DESTROY {
@@ -72,7 +72,9 @@ sub Patro::Tie::SCALAR::TIESCALAR {
 }
 
 sub Patro::Tie::SCALAR::__ {
-    my ($tied,$name,$context,@args) = @_;
+    my $tied = shift;
+    my $name = shift;
+    my $context = shift;
     if (!defined($context)) {
 	$context = defined(wantarray) ? 1 + wantarray : 0;
     }
@@ -81,8 +83,8 @@ sub Patro::Tie::SCALAR::__ {
 	  command => $name,
 	  context => $context,
 	  has_args => @_ > 0,
-	  args => [ @args ],
-	  id => $tied->{id} } );
+	  args => [ @_ ],
+	  id => $tied->{id} }, @_ );
 }
 
 sub Patro::Tie::SCALAR::FETCH { return shift->__('FETCH',1) }

@@ -100,15 +100,13 @@ sub Patro::Tie::HANDLE::WRITE { return shift->__('WRITE',1,@_) }
 sub Patro::Tie::HANDLE::READLINE { return shift->__('READLINE',undef,@_) }
 sub Patro::Tie::HANDLE::GETC { return shift->__('GETC',1,@_) }
 sub Patro::Tie::HANDLE::READ {
-    my $name = 'READ?';
-    if ($Patro::sysread_read_flag) {
-	if ($Patro::sysread_read_flag eq 'read') {
-	    $name = 'READ';
-	} elsif ($Patro::sysread_read_flag eq 'sysread') {
-	    $name = 'SYSREAD';
-	}
+    my $command = 'READ?';
+    if ($Patro::read_sysread_flag eq 'read') {
+	$command = 'READ';
+    } elsif ($Patro::read_sysread_flag eq 'sysread') {
+	$command = 'SYSREAD';
     }
-    return shift->__($name,1,@_);
+    return shift->__($command,1,@_)
 }
 sub Patro::Tie::HANDLE::CLOSE { return shift->__('CLOSE',1,@_) }
 sub Patro::Tie::HANDLE::BINMODE { return shift->__('BINMODE',1,@_) }

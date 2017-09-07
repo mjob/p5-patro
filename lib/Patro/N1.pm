@@ -84,7 +84,6 @@ sub Patro::Tie::HASH::__ {
     my $tied = shift;
     my $name = shift;
     my $context = shift;
-
     if (!defined($context)) {
 	$context = defined(wantarray) ? 1 + wantarray : 0;
     }
