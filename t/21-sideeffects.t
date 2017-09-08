@@ -9,6 +9,9 @@ sub sqr { $_[0] *= $_[0]; 19 }
 
 sub foo::enoent { open my $zh, "<", "/a/bogus:file/that/doesn't/exist"; 11 }
 
+sub foo::manip { my $self=shift;my $c = pop; $_[1] *= 4; 13 }
+sub foo::manip2 { my $self=shift;shift @_ for 1..5; $_[1] = 47; 7 }
+
 my $c1 = \&sqr;
 my $c2 = bless {}, 'foo';
 my ($p1,$p2) = Patro->new( patronize($c1,$c2) )->getProxies;
@@ -31,5 +34,18 @@ local $! = 0;
 ok($! == 0, 'errno test init');
 ok(11 == $p2->enoent(), 'proxy method call');
 ok($!, '... that sets $!');
+
+# what if the code slurps arguments?
+my ($r,$s,$t) = (10,20,30);
+ok(13 == $p2->manip($r,$s,$t), 'proxy method call');
+ok($r == 10 && $t == 30, '... that leaves manipulated args alone');
+ok($s == 80, '... but can still manipulate other args');
+::xdiag([$r,$s,$t]);
+
+my @a4 = (1..20);
+$z = eval { $p2->manip2(@a4) };
+ok($z == 7, 'proxy method call');
+ok($a4[6] == 47, '... that manipulates args');
+ok($a4[19] == 20, '... and leaves other args alone');
 
 done_testing;

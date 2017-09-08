@@ -510,10 +510,11 @@ sub process_request {
 			      $obj,$command,$has_args,$args) };
 	return $@ ? $self->error_response($@) : $resp;
     }
-
+    
     elsif ($topic eq 'METHOD') {
 	my @r;
 	my @orig_args = $has_args ? @$args : ();
+	my @orig_refs = \ (@$args);  
 	my $obj = $self->{obj}{$id};
 	local $! = 0;
 	if ($ctx < 2) {
@@ -527,8 +528,66 @@ sub process_request {
 	if ($@) {
 	    return $self->error_response($@, bless{errno=>$errno},'.Patroclus');
 	}
-#	::xdiag("Checking for arg i/o mismatches",
-#		\@orig_args, $args);
+	my (@out,@outref);
+	for (my $i=0; $i<@orig_refs; $i++) {
+	    my $j = $i;
+	    if ($orig_refs[$i] eq \$args->[$j]) {
+		my $rt_orig = Scalar::Util::reftype($orig_args[$i]) // '';
+		my $rt = Scalar::Util::reftype($args->[$j]) // '';
+		if ('SCALAR' eq $rt_orig) {
+		    if ('SCALAR' eq $rt &&
+			${$orig_args[$i]} ne ${$args->[$j]}) {
+			push @outref, $i, ${$args->[$j]};
+		    } elsif (CORE::ref($args->[$j]) eq '') {
+			push @outref, $i, $args->[$j];
+		    }
+		} elsif ($orig_args[$i] ne $args->[$j]) {
+		    push @out, $i, $args->[$j];
+		}
+	    }
+	}
+	my @addl;
+	if (@out || @outref) {
+	    @addl = (bless { out => \@out, outref => \@outref }, '.Patroclus');
+	    if ($errno) {
+		$addl[0]{errno} = $errno;
+	    }
+	} elsif ($errno) {
+	    @addl = (bless { errno => $errno }, '.Patroclus');
+	}
+	if (@addl) { ::xdiag("additional response data:",$addl[0]); }
+	if ($ctx >= 2) {
+	    return $self->list_response(@r, @addl);
+	} elsif ($ctx == 1 && defined $r[0]) {
+	    return $self->scalar_response($r[0], @addl);
+	} else {
+	    return $self->void_response(@addl);
+	}
+    }
+
+    elsif ($topic eq 'CODE') {
+	my $sub = $self->{obj}{$id};
+	my @r;
+	if (ref($sub) eq 'threadsx::shared::code') {
+	    # not necessary if server uses perl >=v5.18
+	    $sub = $sub->code;
+	}
+	my @orig_args = @$args;
+	local $! = 0;
+	if ($ctx < 2) {
+	    @r = scalar eval { $has_args ? $sub->(@$args) : $sub->() };
+	} else {
+	    @r = eval { $has_args ? $sub->(@$args) : $sub->() };
+	}
+	my $errno = 0 + $!;
+	if ($@) {
+	    if ($errno) {
+		$errno = bless { errno => $errno }, '.Patroclus';
+		return $self->error_response($@, $errno);
+	    } else {
+		return $self->error_response($@);
+	    }
+	}
 	my (@out,@outref);
 	for (my $i=0; $i<@orig_args; $i++) {
 	    if ('SCALAR' eq (Scalar::Util::reftype($orig_args[$i]) // '')) {
@@ -550,48 +609,6 @@ sub process_request {
 	    }
 	} elsif ($errno) {
 	    @addl = (bless { errno => $errno }, '.Patroclus');
-	}
-	if ($ctx >= 2) {
-	    return $self->list_response(@r, @addl);
-	} elsif ($ctx == 1 && defined $r[0]) {
-	    return $self->scalar_response($r[0], @addl);
-	} else {
-	    return $self->void_response(@addl);
-	}
-    }
-
-    elsif ($topic eq 'CODE') {
-	my $sub = $self->{obj}{$id};
-	my @r;
-	if (ref($sub) eq 'threadsx::shared::code') {
-	    # not necessary if server uses perl >=v5.18
-	    $sub = $sub->code;
-	}
-	my @orig_args = @$args;
-	if ($ctx < 2) {
-	    @r = scalar eval { $has_args ? $sub->(@$args) : $sub->() };
-	} else {
-	    @r = eval { $has_args ? $sub->(@$args) : $sub->() };
-	}
-	if ($@) {
-	    return $self->error_response($@);
-	}
-	my (@out,@outref);
-	for (my $i=0; $i<@orig_args; $i++) {
-	    if ('SCALAR' eq (Scalar::Util::reftype($orig_args[$i]) // '')) {
-		if ('SCALAR' eq (Scalar::Util::reftype($args->[$i]) // '') &&
-		    ${$orig_args[$i]} ne ${$args->[$i]}) {
-		    push @outref, $i, ${$args->[$i]};
-		} elsif (CORE::ref($args->[$i]) eq '') {
-		    push @outref, $i, $args->[$i];
-		}
-	    } elsif ($orig_args[$i] ne $args->[$i]) {
-		push @out, $i, $args->[$i];
-	    }
-	}
-	my @addl;
-	if (@out || @outref) {
-	    @addl = (bless { out => \@out, outref => \@outref }, '.Patroclus');
 	}
 	if ($ctx >= 2) {
 	    return $self->list_response(@r, @addl);
@@ -798,12 +815,22 @@ sub process_request_HANDLE {
 	return $self->scalar_response(syswrite $fh, $args->[0],
 				      $args->[1] // undef, $args->[2] // undef);
     } elsif ($command eq 'READLINE') {
+	local $! = 0;
+	my @val;
 	if ($context > 1) {
 	    my @val = readline($fh);
+	    if ($!) {
+		push @val, bless { errno => 0+$! }, '.Patroclus';
+	    }
 	    return $self->list_response(@val);
 	} else {
 	    my $val = readline($fh);
-	    return $self->scalar_response($val);
+	    if ($!) {
+		::xdiag('$!',$!);
+		return $self->scalar_response($val, {errno => 0+$!});
+	    } else {
+		return $self->scalar_response($val);
+	    }
 	}
     } elsif ($command eq 'GETC') {
 	local $! = 0;
@@ -863,7 +890,48 @@ sub process_request_HANDLE {
 	    return $self->scalar_response($z);
 	}
     } elsif ($command eq 'CLOSE') {
+	### this operation should not be allowed in 'secure' mode
+	local $! = 0;
+	local $? = 0;
+	my $z = close $fh;
+	my $val = bless{ errno => 0 + $! }, '.Patroclus';
+	if ($?) { 
+	    $val->{child_error} = $?;
+	}
+	if ($val->{errno} || $val->{child_error}) {
+	    return $self->scalar_response($z, $val);
+	} else {
+	    return $self->scalar_response($z);
+	}
     } elsif ($command eq 'OPEN') {
+	### this operation should not be allowed in 'secure' mode
+	local $! = 0;
+	my $z;
+	my $mode = shift @$args;
+	if (@$args == 0) {
+	    $z = open $fh, $mode;
+	} else {
+	    my $expr = shift @$args;
+	    if (@$args == 0) {
+		$z = open $fh, $mode, $expr;
+	    } else {
+		$z = open $fh, $mode, $expr, @$args;
+	    }
+	}
+
+	# it is hard to set autoflush from the proxy.
+	# Since it is usually what you want, let's do it here.
+	if ($z) {
+	    my $fh_sel = select $fh;
+	    $| = 1;
+	    select $fh_sel;
+	}
+	
+	if ($!) {
+	    return $self->scalar_response($z, {errno => 0+$!});
+	} else {
+	    return $self->scalar_response($z);
+	}
     }
     return $self->error_response("tied HANDLE function '$command' not found");
 }
