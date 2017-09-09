@@ -179,16 +179,10 @@ sub new {
 
 sub getProxies {
     my $patro = shift;
-    if (CORE::ref($patro) eq 'HASH') {
-	# arg to getProxies is config hash, not Patro object
-	my $cfg = $patro;
-	$patro = Patro->new($cfg);
-    } elsif (CORE::ref($patro) eq '') {
-	if (-f $patro) {
-	    $patro = Patro->new($patro);
-	}
+    if (CORE::ref($patro) ne 'Patro') {
+	$patro = Patro->new($patro);
     }
-    return @{$patro->{objs}};
+    return wantarray ? @{$patro->{objs}} : $patro->{objs}[0];
 }
 
 

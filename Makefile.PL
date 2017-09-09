@@ -14,7 +14,15 @@ our %REQUIRED = (
 our @NO_INDEX = ( 'threads::shared' );
 
 our %META_MERGE
-    = (recommends => \%RECOMMENDED);
+    = (recommends => \%RECOMMENDED,
+       'meta-spec' => { version => 2 },
+       resources => {
+	   respository => {
+	       type => 'git',
+	       url => 'https://github.com/mjob/p5-patro.git',
+	       web => 'https://github.com/mjob/p5-patro'
+	   },
+       });
 if (@NO_INDEX) {
     $META_MERGE{no_index} = { 'package' => \@NO_INDEX };
 }

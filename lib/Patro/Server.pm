@@ -67,8 +67,6 @@ sub new {
     if ($threads_avail) {
 	for (@_) {
 	    local $threads::shared::clone_warn = undef;
-	    $DB::single = 1;
-	    
 	    eval { $_ = threads::shared::shared_clone($_) };
 	    if ($@ =~ /CODE|GLOB/) {
 		require Patro::LeumJelly;
@@ -115,7 +113,7 @@ sub new {
     }, __PACKAGE__;
     $self->{config} = $self->config;
     $self->start_server;
-    push @SERVERS, $self;
+    eval { push @SERVERS, $self };
     if (@SERVERS == 1) {
 	eval q~END {
             if ($Patro::Server::threads_avail) {

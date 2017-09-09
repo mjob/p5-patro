@@ -40,7 +40,6 @@ my ($r,$s,$t) = (10,20,30);
 ok(13 == $p2->manip($r,$s,$t), 'proxy method call');
 ok($r == 10 && $t == 30, '... that leaves manipulated args alone');
 ok($s == 80, '... but can still manipulate other args');
-::xdiag([$r,$s,$t]);
 
 my @a4 = (1..20);
 $z = eval { $p2->manip2(@a4) };
