@@ -30,6 +30,7 @@ sub import {
     my ($class, @args) = @_;
     my @tags = grep /^:/, @args;
     @args = grep !/^:/, @args;
+    $Patro::SECURE = 1;
     foreach my $tag (@tags) {
 	if ($tag eq ':test') {
 	    require Patro::Server;
@@ -59,8 +60,16 @@ sub import {
 	    };
 	    push @EXPORT, 'ok_threaded', 'xjoin';
 	}
+	if ($tag eq ':insecure') {
+	    $Patro::SECURE = 0;
+	}
     }
 
+    if (defined($ENV{PATRO_THREADS}) &&
+	!$ENV{PATRO_THREADS}) {
+	$INC{'threads.pm'} = 1;
+	*threads::tid = sub { 0 };
+    }		
     eval "use threads;1";
     eval "use threadsx::shared";
     $Patro::Server::threads_avail = $threads::threads;
@@ -174,6 +183,10 @@ sub getProxies {
 	# arg to getProxies is config hash, not Patro object
 	my $cfg = $patro;
 	$patro = Patro->new($cfg);
+    } elsif (CORE::ref($patro) eq '') {
+	if (-f $patro) {
+	    $patro = Patro->new($patro);
+	}
     }
     return @{$patro->{objs}};
 }
@@ -276,7 +289,7 @@ remote object.
     sub prod { my $self = shift; my $z=1; $z*=$_ for @{$_[0]->{vals}}; $z }
 
     # host 2
-    use Patro;'
+    use Patro;
     my $proxy = getProxies('config');
     print $proxy->prod;      # calls Barfie::prod($obj) on host1, 2 * 5 => 10
     $proxy += 4;             # calls Barfie '+=' sub on host1
@@ -284,13 +297,58 @@ remote object.
 
 =item * Code references
 
-...
+Patro supports sharing code references and data structures that contain
+code references (think dispatch tables). Proxies to these code references
+can invoke the code, which will then run on the server.
+
+    # host 1
+    use Patro;
+    my $foo = sub { $_[0] + 42 };
+    my $d = {
+        f1 => sub { $_[0] + $_[1] },
+        f2 => sub { $_[0] * $_[1] },
+        f3 => sub { int( $_[0] / ($_[1] || 1) ) },
+        g1 => sub { $_[0] += $_[1]; 18 },
+    };
+    patronize($foo,$d)->to_file('config');
+    ...
+
+    # host 2
+    use Patro;
+    my ($p_foo, $p_d) = getProxies('config');
+    print $p_foo->(17);        # "59"   (42+17)
+    print $p_d->{f1}->(7,33);  # "40"   (7+33)
+    print $p_d->{f3}->(33,7);  # "4"    int(33/7)
+    ($x,$y) = (5,6);
+    $p_d->{g1}->($x,$y);
+    print $x;                  # "11"   ($x:6 += 5)
 
 =item * filehandles
 
-...
+Filehandles can also be shared through the Patro framework.
 
-...
+    # host 1
+    use Patro;
+    open my $fh, '>', 'host1.log';
+    patronize($fh)->to_file('config');
+    ...
+
+    # host 2
+    use Patro;
+    my $ph = getProxies('config');
+    print $ph "A log message for the server\n";
+
+Calling C<open> through a proxy filehandle presents some security concerns.
+A client could read or write any file on the server host visible to the
+server's user id. Or worse, a client could open a pipe through the handle
+to run an arbitrary command on the server. C<open> and C<close> operations
+on proxy filehandles will not be allowed unless the process running the
+Patro server imports C<Patro> with the C<:insecure> tag.
+
+Certain operations are not currently supported through proxy filehandles:
+C<truncate PROXY_FH,LENGTH>, C<flock PROXY_FH,OPERATION>,
+C<fcntl PROXY_FH,FUNCTION,SCALAR>, C<stat PROXY_FH>, and C<-X PROXY_FH>.
+
 
 =back
 

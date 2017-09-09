@@ -555,7 +555,6 @@ sub process_request {
 	} elsif ($errno) {
 	    @addl = (bless { errno => $errno }, '.Patroclus');
 	}
-	if (@addl) { ::xdiag("additional response data:",$addl[0]); }
 	if ($ctx >= 2) {
 	    return $self->list_response(@r, @addl);
 	} elsif ($ctx == 1 && defined $r[0]) {
@@ -826,7 +825,6 @@ sub process_request_HANDLE {
 	} else {
 	    my $val = readline($fh);
 	    if ($!) {
-		::xdiag('$!',$!);
 		return $self->scalar_response($val, {errno => 0+$!});
 	    } else {
 		return $self->scalar_response($val);
@@ -852,7 +850,6 @@ sub process_request_HANDLE {
 	    # from a reference to a scalar
 	    $z = read $fh, $buffer, $len, $off || 0;
 	}
-	#::xdiag("READ results:",[$z,$buffer,$fh]);
 	if ($@) {
 	    return $self->error_response($@);
 	} else {
@@ -884,13 +881,15 @@ sub process_request_HANDLE {
 	    $z = binmode $fh;
 	}
 	if (!$z) {
-	    ::xdiag("Server: bad binmode call, \$!=$!");
 	    return $self->scalar_response($z, { errno => 0+$! });
 	} else {
 	    return $self->scalar_response($z);
 	}
     } elsif ($command eq 'CLOSE') {
-	### this operation should not be allowed in 'secure' mode
+	if ($Patro::SECURE) {
+	    return $self->error_response(
+		"Patro: insecure CLOSE operation on proxy filehandle");
+	}
 	local $! = 0;
 	local $? = 0;
 	my $z = close $fh;
@@ -904,7 +903,10 @@ sub process_request_HANDLE {
 	    return $self->scalar_response($z);
 	}
     } elsif ($command eq 'OPEN') {
-	### this operation should not be allowed in 'secure' mode
+	if ($Patro::SECURE) {
+	    return $self->error_response(
+		"Patro: insecure OPEN operation on proxy filehandle");
+	}
 	local $! = 0;
 	my $z;
 	my $mode = shift @$args;

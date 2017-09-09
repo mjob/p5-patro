@@ -99,7 +99,7 @@ ok(!$line, 'exhausted output from remote command');
 $z = close $p6;
 ok(!$z, 'close remote command through proxy filehandle')
     or ::xdiag([$z,$!]);
-ok($? == 256, 'set $? from remote command') or diag $?;
+ok_threaded($? == 256, 'set $? from remote command') or diag $?;
 
 
 done_testing;
