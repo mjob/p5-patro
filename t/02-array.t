@@ -47,4 +47,16 @@ my $r6 = $r1->[10];
 is(CORE::ref($r6), 'Patro::N4', 'proxy handle for nested remote obj');
 is(Patro::ref($r6), 'ARRAY', 'got remote ref type');
 
+$r1->[2] = [ 33,34,35 ];
+is(::xjoin($r1->[2]), ::xjoin([33,34,35]),
+   'ok to STORE arrayref');
+
+$r1->[3] = bless [36,37], 'Arbitrary::Class';
+is(::xjoin($r1->[3]), ::xjoin([36,37]),
+   'ok to STORE ARRAY-type object');
+is(CORE::ref($r1->[3]), 'Patro::N4',
+   'object class name proxified on client');
+is(Patro::ref($r1->[3]), 'Arbitrary::Class',
+   'object class name preserved on server');
+
 done_testing;

@@ -24,6 +24,7 @@ BEGIN {
     } else {
 	$Patro::read_sysread_flag = 'read?';
     }
+    *CORE::GLOBAL::ref = \&Patro::ref;
 }
 
 sub import {

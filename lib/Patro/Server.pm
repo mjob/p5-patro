@@ -248,11 +248,11 @@ sub Patro::Config::from_string {
 
 sub Patro::Config::from_file {
     my ($self, $file) = @_;
-    if (!defined($file) && !ref($self) && $self ne 'Patro::Config') {
+    if (!defined($file) && !CORE::ref($self) && $self ne 'Patro::Config') {
 	$file = $self;
     }
     my $fh;
-    if (ref($file) eq 'GLOB') {
+    if (CORE::ref($file) eq 'GLOB') {
 	$fh = $file;
     } elsif (!open $fh, '<' ,$file) {
 	croak "Patro::Config::fron_file: could not read cfg file '$file': $!";
@@ -428,7 +428,7 @@ sub process_request {
     if ($request->{has_args}) {
 	local $@;
 	$args = [ map {
-	    if (ref($_) eq '.Patroon') {
+	    if (CORE::ref($_) eq '.Patroon') {
 		eval { $self->{obj}{$$_} };
 	    } else {
 		$_
@@ -467,7 +467,7 @@ sub process_request {
 	@r = ();
 	$@ = __PACKAGE__ . ": unrecognized topic '$topic' in proxy request";
     }
-    if (@r && ref($r[0]) eq '.Patroclus') {
+    if (@r && CORE::ref($r[0]) eq '.Patroclus') {
 	return $r[0];
     }
     my $sides = bless {}, '.Patroclus';
@@ -515,9 +515,9 @@ sub process_request_META {
     }
     my $obj = $self->{obj}{$id};
     if ($cmd eq 'ref') {
-	return ref($obj);
+	return CORE::ref($obj);
     } elsif ($cmd eq 'reftype') {
-	return reftype($obj);
+	return Scalar::Util::reftype($obj);
     } elsif ($cmd eq 'destroy') {
 	delete $self->{obj}{$id};
 	my @ids = keys %{$self->{obj}};
@@ -545,7 +545,7 @@ sub process_request_HASH {
     if ($cmd eq 'STORE') {
 	my ($key,$val) = @$args;
 	my $old_val = $obj->{$key};
-	$obj->{$key} = $val;
+	$obj->{$key} = threads::shared::shared_clone($val);
 	return $old_val;
     } elsif ($cmd eq 'FETCH') {
 	return $obj->{$args->[0]};
@@ -582,7 +582,7 @@ sub process_request_ARRAY {
 	my ($index,$val) = @$args;
 	my $old_val = $obj->[$index];
 	# ?!!!? does $val have to be shared?
-	eval { $obj->[$index] = $val };
+	eval { $obj->[$index] = threads::shared::shared_clone($val) };
 	return $old_val;
     } elsif ($cmd eq 'FETCH') {
 	return eval { $obj->[$args->[0]] };
@@ -673,7 +673,7 @@ sub process_request_METHOD {
 sub process_request_HANDLE {
     my ($self,$id,$command,$context,$has_args,$args) = @_;
     my $obj = $self->{obj}{$id};
-    my $fh = ref($obj) eq 'threadsx::shared::glob' ? $obj->glob : $obj;
+    my $fh = CORE::ref($obj) eq 'threadsx::shared::glob' ? $obj->glob : $obj;
     if ($command eq 'PRINT') {
 	my $z = print {$fh} @$args;
 	return $z;
@@ -793,7 +793,7 @@ sub process_request_HANDLE {
 sub process_request_CODE {
     my ($self,$id,$command_NOTUSED,$context,$has_args,$args) = @_;
     my $sub = $self->{obj}{$id};
-    if (ref($sub) eq 'threadsx::shared::code') {
+    if (CORE::ref($sub) eq 'threadsx::shared::code') {
 	$sub = $sub->code;
     }
     if ($context < 2) {
@@ -909,10 +909,10 @@ sub patrol {
     return $obj unless ref($obj);
 
     if ($threads_avail) {
-	if (ref($obj) eq 'CODE') {
+	if (CORE::ref($obj) eq 'CODE') {
 	    $obj = threadsx::shared::code->new($obj);
 	    sxdiag("patrol: coderef converted");
-	} elsif (ref($obj) eq 'GLOB') {
+	} elsif (CORE::ref($obj) eq 'GLOB') {
 	    $obj = threadsx::shared::glob->new($obj);
 	    sxdiag("patrol: glob converted");
 	}
@@ -925,7 +925,7 @@ sub patrol {
 
     if (!$self->{obj}{$id}) {
 	$self->{obj}{$id} = $obj;
-	my $ref = ref($obj);
+	my $ref = CORE::ref($obj);
 	my $reftype;
 	if ($ref eq 'threadsx::shared::code') {
 	    $ref = 'CODE';
@@ -934,7 +934,7 @@ sub patrol {
 	    $ref = 'GLOB';
 	    $reftype = 'GLOB';
 	} else {
-	    $reftype = reftype($obj);
+	    $reftype = Scalar::Util::reftype($obj);
 	}
 	sxdiag("patrol: ref types for $id are $ref,$reftype");
 	$resp->{meta}{$id} = {
