@@ -48,7 +48,7 @@ sub _tie_SPLICE {
     my @bav = B::AV::ARRAY($tied);
     my $arraylen = 0 + @bav;
 
-    $off ||= 0;    
+    $off ||= 0;
     if ($off < 0) {
 	$off += $arraylen;
 	if ($off < 0) {
@@ -66,15 +66,19 @@ sub _tie_SPLICE {
 	    $len = 0;
 	}
     }
+    if ($len > $arraylen) {
+	$len = $arraylen;
+    }
 
     my (@tmp, @val);
+
     for (my $i=0; $i<$off; $i++) {
 	my $fetched = $bav[$i]->object_2svref;
 	push @tmp, $$fetched;
     }
     for (my $i=0; $i<$len; $i++) {
 	my $fetched = $bav[$i+$off]->object_2svref;
-	push @val, $$fetched;
+	push @val, defined($fetched) && $$fetched;
     }
     push @tmp, map { _shared_clone($_) } @list;
     for (my $i=$off+$len; $i<$arraylen; $i++) {

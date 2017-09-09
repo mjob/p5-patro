@@ -1,7 +1,6 @@
 # MANIFEST for p5-patro
 Changes
 lib/Patro.pm
-lib/Patro/CODE/Shareable.pm
 lib/Patro/LeumJelly.pm
 lib/Patro/N1.pm
 lib/Patro/N2.pm
@@ -24,6 +23,7 @@ t/04b-code.t
 t/05a-filehandles.t
 t/05b-filehandles.t
 t/05c-filehandles.t
+t/09-config.t
 t/11-ScalarObj.t
 t/12-ArrayObj.t
 t/13-HashObj.t

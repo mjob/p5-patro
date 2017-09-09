@@ -17,7 +17,7 @@ our %META_MERGE
     = (recommends => \%RECOMMENDED,
        'meta-spec' => { version => 2 },
        resources => {
-	   respository => {
+	   repository => {
 	       type => 'git',
 	       url => 'https://github.com/mjob/p5-patro.git',
 	       web => 'https://github.com/mjob/p5-patro'

@@ -70,7 +70,6 @@ sub new {
 	    eval { $_ = threads::shared::shared_clone($_) };
 	    if ($@ =~ /CODE|GLOB/) {
 		require Patro::LeumJelly;
-		warn "I am really surprised to see this message";
 		warn $@;
 		$threads::shared::clone_warn = 0;
 		$_ = threads::shared::shared_clone($_);
@@ -114,6 +113,7 @@ sub new {
     $self->{config} = $self->config;
     $self->start_server;
     eval { push @SERVERS, $self };
+    warn $@ if $@;
     if (@SERVERS == 1) {
 	eval q~END {
             if ($Patro::Server::threads_avail) {
@@ -219,6 +219,8 @@ sub config {
     return bless $config_data, 'Patro::Config';
 }
 
+########################################
+
 sub Patro::Config::to_string {
     my ($self) = @_;
     return Patro::LeumJelly::serialize({%$self});
@@ -260,6 +262,8 @@ sub Patro::Config::from_file {
     return Patro::Config->from_string($data);
 }
 
+########################################
+
 sub accept_clients {
     # accept connection from client
     # spin off connection to separate thread or process
@@ -279,7 +283,7 @@ sub accept_clients {
 	my $paddr = accept($client,$server);
 	if (!$paddr) {
 	    next if $!{EINTR};
-	    next if $!{ECHILD} || $!==10;   # !?! why $!{ECHILD} not suff on Lin?
+	    next if $!{ECHILD} || $!==10;  # !?! why $!{ECHILD} not suff on Lin?
 	    ::xdiag("accept failure, %errno is",\%!);
 	    croak __PACKAGE__, ": accept ", 0+$!," $!";
 	}
@@ -409,227 +413,393 @@ sub request_response_loop {
     return;
 }
 
-sub serialize_response {
-    my ($self, $resp) = @_;
-    if ($resp->{context}) {
-	if ($resp->{context} == 1) {
-	    $resp->{response} = patrol($self,$resp,$resp->{response});
-	} elsif ($resp->{context} == 2) {
-	    $resp->{response} = [
-		map patrol($self,$resp,$_), @{$resp->{response}} ];
-	}
-    }
-    $resp = Patro::LeumJelly::serialize($resp);
-    return $resp;
-}
-
 sub process_request {
-    my ($self, $request) = @_;
-    croak "process_request: invalid non-scalar request" if ref($request);
+    my ($self,$request) = @_;
+    croak "process_request: expected scalar request" if ref($request);
 
     $request = Patro::LeumJelly::deserialize($request);
     my $topic = $request->{topic};
-    my $command = $request->{command};
-    my $has_args = $request->{has_args};
-    my $args = $request->{args};
-    my $ctx = $request->{context};
-    my $id = $request->{id};
-
-    if (!defined $topic) {
-	Carp::confess "process_request: bad topic in request '$_[1]'";
-    }
-    if ($request->{has_args}) {
-	$args = [ map {
-	    if (ref($_) eq '.Patroon') {
-		if (!defined $$_) {
-		    croak "server: argument $_ in $topic request refers to ",
-			"undefined reference";
-		}
-#		::xdiag("server: arg $$_ from client is .Patroon");
-		$self->{obj}{$$_}
-	    } else {
-		$_
-	    }  } @{$request->{args}} ];
-    }
-
-    if ($topic eq 'META') {
-	if ($command eq 'disconnect') {
-	    $Patro::Server::disconnect = 1;
-	    return { disconnect_ok => 1 };
-	} else {
-	    my $obj = $self->{obj}{$id};
-	    if ($command eq 'ref') {
-		return $self->scalar_response(ref($obj));
-	    } elsif ($command eq 'reftype') {
-		return $self->scalar_response(Scalar::Util::reftype($obj));
-	    } elsif ($command eq 'destroy') {
-		delete $self->{obj}{$id};
-		my @ids = keys %{$self->{obj}};
-		if (@ids == 0) {
-		    return { disconnect_ok => 1 };
-		    $Patro::Server::disconnect = 1;
-		} else {
-		    return { disconnect_ok => 0,
-			     num_remaining_objs => 0+@ids };
-		}
-	    } else {
-		return $self->error_response(
-		    "Patro: unsupported meta command '$command'");
-	    }
-	}
-    }
-
-    elsif ($topic eq 'HASH') {
-	my $obj = $self->{obj}{$id};
-	if (Scalar::Util::reftype($obj) ne 'HASH') {
-	    return $self->error_response("Not a HASH reference");
-	}
-	my $resp = eval { $self->process_request_HASH(
-			      $obj,$command,$has_args,$args) };
-	return $@ ? $self->error_response($@) : $resp;
-    }
-
-    elsif ($topic eq 'ARRAY') {
-	my $obj = $self->{obj}{$id};
-	if (Scalar::Util::reftype($obj) ne 'ARRAY') {
-	    return $self->error_response("Not an ARRAY reference");
-	}
-	my $resp = eval { $self->process_request_ARRAY(
-			      $obj,$command,$ctx,$has_args,$args) };
-	return $@ ? $self->error_response($@) : $resp;
-    }
-
-    elsif ($topic eq 'SCALAR') {
-	my $obj = $self->{obj}{$id};
-	if (Scalar::Util::reftype($obj) ne 'SCALAR') {
-	    return $self->error_response("Not a SCALAR reference");
-	}
-	my $resp = eval { $self->process_request_SCALAR(
-			      $obj,$command,$has_args,$args) };
-	return $@ ? $self->error_response($@) : $resp;
+    if (!defined($topic)) {
+	return $self->error_response("bad topic in request '$_[1]'");
     }
     
-    elsif ($topic eq 'METHOD') {
-	my @r;
-	my @orig_args = $has_args ? @$args : ();
-	my @orig_refs = \ (@$args);  
-	my $obj = $self->{obj}{$id};
-	local $! = 0;
-	if ($ctx < 2) {
-	    @r = scalar eval { $has_args ? $obj->$command(@$args)
-				   : $obj->$command };
-	} else {
-	    @r = eval { $has_args ? $obj->$command(@$args)
-			          : $obj->$command };
-	}
-	my $errno = 0 + $!;
+    my $has_args = $request->{has_args};
+    my $args = $request->{args};
+    if ($request->{has_args}) {
+	local $@;
+	$args = [ map {
+	    if (ref($_) eq '.Patroon') {
+		eval { $self->{obj}{$$_} };
+	    } else {
+		$_
+	    } } @{$request->{args}} ];
 	if ($@) {
-	    return $self->error_response($@, bless{errno=>$errno},'.Patroclus');
-	}
-	my (@out,@outref);
-	for (my $i=0; $i<@orig_refs; $i++) {
-	    my $j = $i;
-	    if ($orig_refs[$i] eq \$args->[$j]) {
-		my $rt_orig = Scalar::Util::reftype($orig_args[$i]) // '';
-		my $rt = Scalar::Util::reftype($args->[$j]) // '';
-		if ('SCALAR' eq $rt_orig) {
-		    if ('SCALAR' eq $rt &&
-			${$orig_args[$i]} ne ${$args->[$j]}) {
-			push @outref, $i, ${$args->[$j]};
-		    } elsif (CORE::ref($args->[$j]) eq '') {
-			push @outref, $i, $args->[$j];
-		    }
-		} elsif ($orig_args[$i] ne $args->[$j]) {
-		    push @out, $i, $args->[$j];
-		}
-	    }
-	}
-	my @addl;
-	if (@out || @outref) {
-	    @addl = (bless { out => \@out, outref => \@outref }, '.Patroclus');
-	    if ($errno) {
-		$addl[0]{errno} = $errno;
-	    }
-	} elsif ($errno) {
-	    @addl = (bless { errno => $errno }, '.Patroclus');
-	}
-	if ($ctx >= 2) {
-	    return $self->list_response(@r, @addl);
-	} elsif ($ctx == 1 && defined $r[0]) {
-	    return $self->scalar_response($r[0], @addl);
-	} else {
-	    return $self->void_response(@addl);
+	    return $self->error_response($@);
 	}
     }
+    my $id = $request->{id};
+    my $cmd = $request->{command};
+    my $ctx = $request->{context};
+    my @orig_args = $has_args ? @$args : ();
+    my @orig_refs = $has_args ? \ (@$args) : ();
+    local $! = 0;
+    local $? = 0;
+    my @r;
 
-    elsif ($topic eq 'CODE') {
-	my $sub = $self->{obj}{$id};
-	my @r;
-	if (ref($sub) eq 'threadsx::shared::code') {
-	    # not necessary if server uses perl >=v5.18
-	    $sub = $sub->code;
-	}
-	my @orig_args = @$args;
-	local $! = 0;
-	if ($ctx < 2) {
-	    @r = scalar eval { $has_args ? $sub->(@$args) : $sub->() };
-	} else {
-	    @r = eval { $has_args ? $sub->(@$args) : $sub->() };
-	}
-	my $errno = 0 + $!;
-	if ($@) {
-	    if ($errno) {
-		$errno = bless { errno => $errno }, '.Patroclus';
-		return $self->error_response($@, $errno);
-	    } else {
-		return $self->error_response($@);
-	    }
-	}
-	my (@out,@outref);
-	for (my $i=0; $i<@orig_args; $i++) {
-	    if ('SCALAR' eq (Scalar::Util::reftype($orig_args[$i]) // '')) {
-		if ('SCALAR' eq (Scalar::Util::reftype($args->[$i]) // '') &&
-		    ${$orig_args[$i]} ne ${$args->[$i]}) {
+    if ($topic eq 'META') {
+	@r = $self->process_request_META($id,$cmd,$ctx,$has_args,$args);
+    } elsif ($topic eq 'HASH') {
+	@r = $self->process_request_HASH($id,$cmd,$ctx,$has_args,$args);
+    } elsif ($topic eq 'ARRAY') {
+	@r = $self->process_request_ARRAY($id,$cmd,$ctx,$has_args,$args);
+    } elsif ($topic eq 'SCALAR') {
+	@r = $self->process_request_SCALAR($id,$cmd,$ctx,$has_args,$args);
+    } elsif ($topic eq 'METHOD') {
+	@r = $self->process_request_METHOD($id,$cmd,$ctx,$has_args,$args);
+    } elsif ($topic eq 'CODE') {
+	@r = $self->process_request_CODE($id,undef,$ctx,$has_args,$args);
+    } elsif ($topic eq 'HANDLE') {
+	@r = $self->process_request_HANDLE($id,$cmd,$ctx,$has_args,$args);
+    } elsif ($topic eq 'OVERLOAD') {
+	my $obj = $self->{obj}{$id};
+	@r = $self->process_request_OVERLOAD($obj,$cmd,$args,$ctx);
+    } else {
+	@r = ();
+	$@ = __PACKAGE__ . ": unrecognized topic '$topic' in proxy request";
+    }
+    if (@r && ref($r[0]) eq '.Patroclus') {
+	return $r[0];
+    }
+    my $sides = bless {}, '.Patroclus';
+
+    $sides->{errno} = 0 + $! if $!;
+    $sides->{errno_extended} = $^E if $^E;
+    $sides->{child_error} = $? if $?;
+    $sides->{error} = $@ if $@;
+
+    my (@out,@outref);
+    for (my $i=0; $i<@orig_refs; $i++) {
+	no warnings 'uninitialized';
+	if ($orig_refs[$i] eq \$args->[$i]) {
+	    my $rt_orig = reftype($orig_args[$i]) // '';
+	    my $rt = reftype($args->[$i]) // '';
+	    if ('SCALAR' eq $rt_orig) {
+		if ('SCALAR' eq $rt && ${$orig_args[$i]} ne ${$args->[$i]}) {
 		    push @outref, $i, ${$args->[$i]};
 		} elsif (CORE::ref($args->[$i]) eq '') {
 		    push @outref, $i, $args->[$i];
 		}
-	    } elsif ($orig_args[$i] ne $args->[$i]) {
+	    } elsif ($orig_args[$i] ne $args->[$i]
+		         || defined($orig_args[$i]) != defined($args->[$i])) {
 		push @out, $i, $args->[$i];
 	    }
 	}
-	my @addl;
-	if (@out || @outref) {
-	    @addl = (bless { out => \@out, outref => \@outref }, '.Patroclus');
-	    if ($errno) {
-		$addl[0]{errno} = $errno;
-	    }
-	} elsif ($errno) {
-	    @addl = (bless { errno => $errno }, '.Patroclus');
-	}
-	if ($ctx >= 2) {
-	    return $self->list_response(@r, @addl);
-	} elsif ($ctx == 1 && defined($r[0])) {
-	    return $self->scalar_response($r[0], @addl);
+    }
+    $sides->{out} = \@out if @out;
+    $sides->{outref} = \@outref if @outref;
+
+    if ($ctx >= 2) {
+	return $self->list_response($sides, @r);
+    } elsif ($ctx == 1 && defined $r[0]) {
+	return $self->scalar_response($sides, $r[0]);
+    } else {
+	return $self->void_response($sides);
+    }
+}
+
+sub process_request_META {
+    my ($self,$id,$cmd,$ctx,$has_args,$args) = @_;
+    if ($cmd eq 'disconnect') {
+	$Patro::Server::disconnect = 1;
+	return bless { disconnect_ok => 1 }, '.Patroclus';
+    }
+    my $obj = $self->{obj}{$id};
+    if ($cmd eq 'ref') {
+	return ref($obj);
+    } elsif ($cmd eq 'reftype') {
+	return reftype($obj);
+    } elsif ($cmd eq 'destroy') {
+	delete $self->{obj}{$id};
+	my @ids = keys %{$self->{obj}};
+	if (@ids == 0) {
+	    $Patro::Server::disconnect = 1;
+	    return bless { disconnect_ok => 1 }, '.Patroclus';
 	} else {
-	    return $self->void_response(@addl);
+	    return bless { disconnect_ok => 0,
+		     num_reminaing_objs => 0+@ids }, '.Patroclus';
 	}
+    } else {
+	$@ = "Patro: unsupported meta command '$cmd'";
+	return;
     }
+}
 
-    elsif ($topic eq 'OVERLOAD') {
-	my $obj = $self->{obj}{$id};
-	return $self->process_request_OVERLOAD($obj,$command,$args,$ctx);
+sub process_request_HASH {
+    my ($self,$id,$cmd,$ctx,$has_args,$args) = @_;
+    my $obj = $self->{obj}{$id};
+    if (reftype($obj) ne 'HASH') {
+	$@ = "Not a HASH reference";
+	return;
+	# !!! what if '%{}' op is overloaded?
     }
-
-    elsif ($topic eq 'HANDLE') {
-	my $obj = $self->{obj}{$id};
-	return $self->process_request_HANDLE(
-	    $obj,$command,$ctx,$has_args,$args);
+    if ($cmd eq 'STORE') {
+	my ($key,$val) = @$args;
+	my $old_val = $obj->{$key};
+	$obj->{$key} = $val;
+	return $old_val;
+    } elsif ($cmd eq 'FETCH') {
+	return $obj->{$args->[0]};
+    } elsif ($cmd eq 'DELETE') {
+	return delete $obj->{$args->[0]};
+    } elsif ($cmd eq 'EXISTS') {
+	return exists $obj->{$args->[0]};
+    } elsif ($cmd eq 'CLEAR') {
+	%$obj = ();
+	return;
+    } elsif ($cmd eq 'FIRSTKEY') {
+	keys %$obj;
+	my ($k,$v) = each %$obj;
+	return $k;
+    } elsif ($cmd eq 'NEXTKEY') {
+	my ($k,$v) = each %$obj;
+	return $k;
+    } elsif ($cmd eq 'SCALAR') {
+	return scalar %$obj;
+    } else {
+	$@ = "HASH function '$cmd' not recognized";
+	return;
     }
+}
 
-    else {
-	return $self->error_response(
-	    __PACKAGE__,": unrecognized topic '$topic'");
+sub process_request_ARRAY {
+    my ($self,$id,$cmd,$ctx,$has_args,$args) = @_;
+    my $obj = $self->{obj}{$id};
+    if (reftype($obj) ne 'ARRAY') {
+	$@ = "Not an ARRAY ref";
+	return;
+    }
+    if ($cmd eq 'STORE') {
+	my ($index,$val) = @$args;
+	my $old_val = $obj->[$index];
+	# ?!!!? does $val have to be shared?
+	eval { $obj->[$index] = $val };
+	return $old_val;
+    } elsif ($cmd eq 'FETCH') {
+	return eval { $obj->[$args->[0]] };
+    } elsif ($cmd eq 'FETCHSIZE') {
+	return scalar @$obj;
+    } elsif ($cmd eq 'STORESIZE' || $cmd eq 'EXTEND') {
+	my $n = $#{$obj} = $args->[0]-1;
+	return $n+1;
+    } elsif ($cmd eq 'SPLICE') {
+	my ($off,$len,@list) = @$args;
+	if ($off < 0) {
+	    $off += @$obj;
+	    if ($off < 0) {
+		$@ = "Modification of non-createable array value attempted, "
+		    . "subscript $off";
+		return;
+	    }
+	}
+	if (!defined($len) || $len eq 'undef') {
+	    $len = @{$obj} - $off;
+	}
+	if ($len < 0) {
+	    $len += @{$obj} - $off;
+	    if ($len < 0) {
+		$len = 0;
+	    }
+	}
+	my @val = splice @{$obj}, $off, $len, @list;
+	# SPLICE is the only ARRAY function that doesn't assume scalar context
+	if ($ctx == 1) {
+	    return @val > 0 ? $val[-1] : undef;
+	} else {
+	    return @val;
+	}
+    } elsif ($cmd eq 'PUSH') {
+	return push @{$obj}, map threads::shared::shared_clone($_), @$args;
+    } elsif ($cmd eq 'UNSHIFT') {
+	return unshift @{$obj}, map threads::shared::shared_clone($_), @$args;
+    } elsif ($cmd eq 'POP') {
+	return pop @{$obj};
+    } elsif ($cmd eq 'SHIFT') {
+	return shift @{$obj};
+    } elsif ($cmd eq 'EXISTS') {
+	return exists $obj->[$args->[0]];
+    } else {
+	$@ = "tied ARRAY function '$cmd' not recognized";
+	return;
+    }
+}
+
+sub process_request_SCALAR {
+    my ($self,$id,$cmd,$ctx,$has_args,$args) = @_;
+    my $obj = $self->{obj}{$id};
+    if (reftype($obj) ne 'SCALAR') {
+	$@ = "Not a SCALAR reference";
+	return;
+    }
+    if ($cmd eq 'STORE') {
+	my $val = ${$obj};
+	${$obj} = threads::shared::shared_clone($args->[0]);
+	return $val;	
+    } elsif ($cmd eq 'FETCH') {
+	return ${$obj};
+    } else {
+	$@ = "tied SCALAR function '$cmd' not recognized";
+	return;
+    }
+}
+
+sub process_request_METHOD {
+    my ($self,$id,$command,$context,$has_args,$args) = @_;
+    my $obj = $self->{obj}{$id};
+    if (!$obj) {
+	$@ = "Bad object id '$id' in proxy method call";
+	return;
+    }
+    my @r;
+    if ($context < 2) {
+	@r = scalar eval { $has_args ? $obj->$command(@$args)
+			             : $obj->$command };
+    } else {
+	@r = eval { $has_args ? $obj->$command(@$args)
+			      : $obj->$command };
+    }
+    return @r;
+}
+
+sub process_request_HANDLE {
+    my ($self,$id,$command,$context,$has_args,$args) = @_;
+    my $obj = $self->{obj}{$id};
+    my $fh = ref($obj) eq 'threadsx::shared::glob' ? $obj->glob : $obj;
+    if ($command eq 'PRINT') {
+	my $z = print {$fh} @$args;
+	return $z;
+    } elsif ($command eq 'PRINTF') {
+	if ($has_args) {
+	    my $template = shift @$args;
+	    my $z = printf {$fh} $template, @$args;
+	    return $z;
+	} else {
+	    # I don't think we can get here through the proxy
+	    my $z = printf {$fh} "";
+	    return $z;
+	}
+    } elsif ($command eq 'WRITE') {
+	if (@$args < 2) {
+	    return $self->error_response("Not enough arguments for syswrite");
+	}
+	return syswrite($fh, $args->[0],
+	                     $args->[1] // undef, $args->[2] // undef);
+    } elsif ($command eq 'READLINE') {
+	my @val;
+	if ($context > 1) {
+	    my @val = readline($fh);
+	    return @val;
+	} else {
+	    my $val = readline($fh);
+	    return $val;
+	}
+    } elsif ($command eq 'GETC') {
+	my $ch = getc($fh);
+	return $ch;
+    } elsif ($command eq 'READ' || $command eq 'READ?' ||
+	     $command eq 'SYSREAD') {
+	local $Patro::read_sysread_flag;  # don't clobber
+	if (@$args < 2) {
+	    # I don't think we can get here through the proxy
+	    $@ = "Not enough arguments for " . lc($command);
+	    return;
+	}
+	my (undef, $len, $off) = @$args;
+	my $z;
+	if ($command eq 'SYSREAD' ||
+	    ($command eq 'READ?' && fileno($fh) >= 0)) {
+	    $z = sysread $fh, $args->[0], $len, $off || 0;
+	} else {
+	    # sysread doesn't work, for example, on file handles opened
+	    # from a reference to a scalar
+	    $z = read $fh, $args->[0], $len, $off || 0;
+	}
+	return $z;
+    } elsif ($command eq 'EOF') {
+	return eof($fh);
+    } elsif ($command eq 'FILENO') {
+	my $z = fileno($fh);
+	return $z;
+    } elsif ($command eq 'SEEK') {
+	if (@$args < 2) {
+	    $@ = "Not enough arguments for seek";
+	    return;
+	} elsif (@$args > 2) {
+	    $@ = "Too many arguments for seek";
+	    return;
+	} else {
+	    my $z = seek $fh, $args->[0], $args->[1];
+	    return $z;
+	}
+    } elsif ($command eq 'TELL') {
+	my $z = tell($fh);
+	return $z;
+    } elsif ($command eq 'BINMODE') {
+	my $z;
+	if (@$args) {
+	    $z = binmode $fh, $args->[0];
+	} else {
+	    $z = binmode $fh;
+	}
+	return $z;
+    } elsif ($command eq 'CLOSE') {
+	if ($Patro::SECURE) {
+	    $@ = "Patro: insecure CLOSE operation on proxy filehandle";
+	    return;
+	}
+	my $z = close $fh;
+	return $z;    
+    } elsif ($command eq 'OPEN') {
+	if ($Patro::SECURE) {
+	    $@ = "Patro: insecure OPEN operation on proxy filehandle";
+	    return;
+	}
+	my $z;
+	my $mode = shift @$args;
+	if (@$args == 0) {
+	    $z = open $fh, $mode;
+	} else {
+	    my $expr = shift @$args;
+	    if (@$args == 0) {
+		$z = open $fh, $mode, $expr;
+	    } else {
+		$z = open $fh, $mode, $expr, @$args;
+	    }
+	}
+
+	# it is hard to set autoflush from the proxy.
+	# Since it is usually what you want, let's do it here.
+	if ($z) {
+	    my $fh_sel = select $fh;
+	    $| = 1;
+	    select $fh_sel;
+	}
+	return $z;
+    } else {
+	$@ = "tied HANDLE function '$command' not found";
+	return;
+    }
+}
+
+sub process_request_CODE {
+    my ($self,$id,$command_NOTUSED,$context,$has_args,$args) = @_;
+    my $sub = $self->{obj}{$id};
+    if (ref($sub) eq 'threadsx::shared::code') {
+	$sub = $sub->code;
+    }
+    if ($context < 2) {
+	return scalar eval { $has_args ? $sub->(@$args) : $sub->() };
+    } else {
+	return eval { $has_args ? $sub->(@$args) : $sub->() };
     }
 }
 
@@ -670,272 +840,66 @@ sub process_request_OVERLOAD {
         $z = eval "\$x $op \$y";
     }
     if ($@) {
-	return $self->error_response($@);
+	return;
     }
     if ($threads_avail) {
 	$z = threads::shared::shared_clone($z);
     }
-    return $self->scalar_response($z);
+    return $z;
 }
 
-sub process_request_HASH {
-    my ($self,$obj,$command,$has_args,$args) = @_;
-    if ($command eq 'STORE') {
-	my ($key,$val) = @$args;
-	my $old_val = $obj->{$key};
-	$obj->{$key} = $val;
-	return $self->scalar_response($old_val);
-    } elsif ($command eq 'FETCH') {
-	my $key = $args->[0];
-	my $val = $obj->{$key};
-	return $self->scalar_response( $obj->{$args->[0]} );
-    } elsif ($command eq 'DELETE') {
-	return $self->scalar_response( delete $obj->{$args->[0]} );
-    } elsif ($command eq 'EXISTS') {
-	return $self->scalar_response( exists $obj->{$args->[0]} );
-    } elsif ($command eq 'CLEAR') {
-	%$obj = ();
-	return $self->void_response;
-    } elsif ($command eq 'FIRSTKEY') {
-	keys %$obj;
-	my ($k,$v) = each %$obj;
-	return $self->scalar_response($k);
-    } elsif ($command eq 'NEXTKEY') {
-	my ($k,$v) = each %$obj;
-	return $self->scalar_response($k);
-    } elsif ($command eq 'SCALAR') {
-	my $n = scalar %$obj;
-	return $self->scalar_response($n);
+########################################
+
+sub void_response {
+    my $addl = {};
+    if (@_ > 0 && CORE::ref($_[-1]) eq '.Patroclus') {
+	$addl = pop @_;
     }
-    die "tied HASH function '$command' not recognized";
+    return +{ context => 0, response => undef, %$addl };
 }
 
-sub process_request_ARRAY {
-    my ($self,$obj,$command,$context,$has_args,$args) = @_;
-    if ($command eq 'STORE') {
-	my ($index,$val) = @$args;
-	return $self->scalar_response( $obj->[$index] = $val );
-    } elsif ($command eq 'FETCH') {
-	return $self->scalar_response( $obj->[$args->[0]] );
-    } elsif ($command eq 'FETCHSIZE') {
-	return $self->scalar_response( scalar @$obj );
-    } elsif ($command eq 'STORESIZE') {
-	my $n = $#{$obj} = $args->[0];
-	return $self->scalar_response($n+1);
-    } elsif ($command eq 'SPLICE') {
-	my ($off,$len,@list) = @$args;
-	if ($off < 0) {
-	    $off += @$obj;
-	    if ($off < 0) {
-		croak "Modification of non-createable array value attempted, ",
-		    "subscript $off";
-	    }
-	}
+sub scalar_response {
+    my ($self,$sides,$val) = @_;
+    return +{
+	context => 1,
+	response => $val,
+	%$sides
+    };
+}
 
-	if ($len eq 'undef') {
-	    $len = @{$obj} - $off;
-	}
-	if ($len < 0) {
-	    $len += @{$obj} - $off;
-	    if ($len < 0) {
-		$len = 0;
-	    }
-	}
+sub list_response {
+    my ($self,$sides,@val) = @_;
+    return +{
+	context => 2,
+	response => \@val,
+	%$sides
+    };
+}
 
-	my @val;
-	if ($threads_avail && threads::shared::is_shared($obj)) {
-	    # "Splice not implemented for shared arrays" in threads::shared.
-	    # This is a workaround
-	    @val = @{$obj}[$off .. $off+$len-1];
-	    my @tmp = @{$obj}[0..$off-1];
-	    push @tmp, @list;
-	    push @tmp, @{$obj}[$off+$len..$#{$obj}];
-	    @$obj = @tmp;
-	} else {
-	    @val = splice @{$obj},$off,$len,@list;
-	}
+sub error_response {
+    my ($self,@msg) = @_;
+    return { error => join('', @msg) };
+}
 
-	# this is the only ARRAY function that doesn't assume scalar context
-	if ($context == 1) {
-	    return $self->scalar_response(@val > 0 ? $val[-1] : undef);
-	}	
-	return $self->list_response(@val);
-    } elsif ($command eq 'PUSH') {
-	my $n = push @{$obj}, map threads::shared::shared_clone($_),@$args;
-	return $self->scalar_response($n);
-    } elsif ($command eq 'UNSHIFT') {
-	my $n = unshift @$obj, map threads::shared::shared_clone($_),@$args;
-	return $self->scalar_response($n);
-    } elsif ($command eq 'POP') {
-	return $self->scalar_response(pop @$obj);
-    } elsif ($command eq 'SHIFT') {
-	return $self->scalar_response(shift @$obj);
-    } elsif ($command eq 'EXISTS') {
-	return $self->scalar_response(exists $obj->[$args->[0]]);
+########################################
+
+sub serialize_response {
+    my ($self, $resp) = @_;
+    if ($resp->{context}) {
+	if ($resp->{context} == 1) {
+	    $resp->{response} = patrol($self,$resp,$resp->{response});
+	} elsif ($resp->{context} == 2) {
+	    $resp->{response} = [
+		map patrol($self,$resp,$_), @{$resp->{response}} ];
+	}
     }
 
-    die "tied ARRAY function '$command' not recognized";
-}
-
-sub process_request_SCALAR {
-    my ($self,$obj,$command,$has_args,$args) = @_;
-    if ($command eq 'STORE') {
-	${$obj} = threads::shared::shared_clone($args->[0]);
-	return $self->scalar_response(${$obj});
-    } elsif ($command eq 'FETCH') {
-	my $return = $self->scalar_response(${$obj});
-	return $return;
-    }
-    die "topic 'SCALAR': command '$command' not recognized";
-}
-
-sub process_request_HANDLE {
-    my ($self,$obj,$command,$context,$has_args,$args) = @_;
-    my $fh = ref($obj) eq 'threadsx::shared::glob' ? $obj->glob : $obj;
-    if ($command eq 'PRINT') {
-	my $z = print {$fh} @$args;
-	return $self->scalar_response($z);
-    } elsif ($command eq 'PRINTF') {
-	if ($has_args) {
-	    my $template = shift @$args;
-	    my $z = printf {$fh} $template, @$args;
-	    return $self->scalar_response($z);
-	} else {
-	    # I don't think we can get here through the proxy
-	    my $z = printf {$fh} "";
-	    return $self->scalar_response($z);
-	}
-    } elsif ($command eq 'WRITE') {
-	if (@$args < 2) {
-	    return $self->error_response("Not enough arguments for syswrite");
-	}
-	return $self->scalar_response(syswrite $fh, $args->[0],
-				      $args->[1] // undef, $args->[2] // undef);
-    } elsif ($command eq 'READLINE') {
-	local $! = 0;
-	my @val;
-	if ($context > 1) {
-	    my @val = readline($fh);
-	    if ($!) {
-		push @val, bless { errno => 0+$! }, '.Patroclus';
-	    }
-	    return $self->list_response(@val);
-	} else {
-	    my $val = readline($fh);
-	    if ($!) {
-		return $self->scalar_response($val, {errno => 0+$!});
-	    } else {
-		return $self->scalar_response($val);
-	    }
-	}
-    } elsif ($command eq 'GETC') {
-	local $! = 0;
-	my $ch = getc($fh);
-	return $self->scalar_response($ch);
-    } elsif ($command eq 'READ' || $command eq 'READ?' ||
-	     $command eq 'SYSREAD') {
-	local $Patro::read_sysread_flag;  # don't clobber
-	if (@$args < 2) {
-	    # I don't think we can get here through the proxy
-	    return $self->error_response("Not enough arguments for read");
-	}
-	my ($buffer, $len, $off) = @$args;
-	my $z;
-	if ($command eq 'SYSREAD' || ($command eq 'READ?' && fileno($fh) >= 0)) {
-	    $z = sysread $fh, $buffer, $len, $off || 0;
-	} else {
-	    # sysread doesn't work, for example, on file handles opened
-	    # from a reference to a scalar
-	    $z = read $fh, $buffer, $len, $off || 0;
-	}
-	if ($@) {
-	    return $self->error_response($@);
-	} else {
-	    return $self->scalar_response($z, { out => [0,$buffer] })
-	}
-    } elsif ($command eq 'EOF') {
-	return $self->scalar_response( eof($fh) );
-    } elsif ($command eq 'FILENO') {
-	my $z = fileno($fh);
-	return $self->scalar_response($z);
-    } elsif ($command eq 'SEEK') {
-	if (@$args < 2) {
-	    return $self->error_response("Not enough arguments for seek");
-	} elsif (@$args > 2) {
-	    return $self->error_response("Too many arguments for seek");
-	} else {
-	    my $z = seek $fh, $args->[0], $args->[1];
-	    return $self->scalar_response($z);
-	}
-    } elsif ($command eq 'TELL') {
-	my $z = tell($fh);
-	return $self->scalar_response($z);
-    } elsif ($command eq 'BINMODE') {
-	local $! = 0;
-	my $z;
-	if (@$args) {
-	    $z = binmode $fh, $args->[0];
-	} else {
-	    $z = binmode $fh;
-	}
-	if (!$z) {
-	    return $self->scalar_response($z, { errno => 0+$! });
-	} else {
-	    return $self->scalar_response($z);
-	}
-    } elsif ($command eq 'CLOSE') {
-	if ($Patro::SECURE) {
-	    return $self->error_response(
-		"Patro: insecure CLOSE operation on proxy filehandle");
-	}
-	local $! = 0;
-	local $? = 0;
-	my $z = close $fh;
-	my $val = bless{ errno => 0 + $! }, '.Patroclus';
-	if ($?) { 
-	    $val->{child_error} = $?;
-	}
-	if ($val->{errno} || $val->{child_error}) {
-	    return $self->scalar_response($z, $val);
-	} else {
-	    return $self->scalar_response($z);
-	}
-    } elsif ($command eq 'OPEN') {
-	if ($Patro::SECURE) {
-	    return $self->error_response(
-		"Patro: insecure OPEN operation on proxy filehandle");
-	}
-	local $! = 0;
-	my $z;
-	my $mode = shift @$args;
-	if (@$args == 0) {
-	    $z = open $fh, $mode;
-	} else {
-	    my $expr = shift @$args;
-	    if (@$args == 0) {
-		$z = open $fh, $mode, $expr;
-	    } else {
-		$z = open $fh, $mode, $expr, @$args;
-	    }
-	}
-
-	# it is hard to set autoflush from the proxy.
-	# Since it is usually what you want, let's do it here.
-	if ($z) {
-	    my $fh_sel = select $fh;
-	    $| = 1;
-	    select $fh_sel;
-	}
-	
-	if ($!) {
-	    return $self->scalar_response($z, {errno => 0+$!});
-	} else {
-	    return $self->scalar_response($z);
-	}
-    }
-    return $self->error_response("tied HANDLE function '$command' not found");
-}
+    # TODO: call patrol() on side-effects
     
+    $resp = Patro::LeumJelly::serialize($resp);
+    return $resp;
+}
+
 # we should not send any serialized references back to the client.
 # replace any references in the response with an
 # object id.
@@ -984,45 +948,6 @@ sub patrol {
 	sxdiag("id $id has been seen before");
     }
     return \$id;
-}
-
-sub void_response {
-    my $addl = {};
-    if (@_ > 0 && CORE::ref($_[-1]) eq '.Patroclus') {
-	$addl = pop @_;
-    }
-    return +{ context => 0, response => undef, %$addl };
-}
-
-sub scalar_response {
-    my ($self,$val,$addl) = @_;
-    return +{
-	context => 1,
-	response => $val,
-	$addl ? %$addl : ()
-    };
-}
-
-sub list_response {
-    my ($self,@val) = @_;
-    my $addl = {};
-    if (@val && CORE::ref($val[-1]) eq '.Patroclus') {
-	$addl = pop @val;
-    }
-    return +{
-	context => 2,
-	response => \@val,
-	%$addl
-    };
-}
-
-sub error_response {
-    my ($self,@msg) = @_;
-    if (@msg && CORE::ref($msg[-1]) eq '.Patroclus') {
-	my $val = pop @msg;
-	return { error => join('',@msg), %$val };
-    }
-    return { error => join('',@msg) };
 }
 
 sub TEST_MODE {
