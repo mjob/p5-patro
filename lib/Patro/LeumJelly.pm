@@ -29,6 +29,11 @@ sub handle {
     }
 }
 
+########################################
+
+# bonus discovery about Storable serialization --
+# storage order is deterministic
+
 sub serialize {
     return MIME::Base64::encode_base64( 
 	Storable::freeze( $_[0] ), "");
@@ -45,6 +50,8 @@ sub deserialize {
 	    MIME::Base64::decode_base64($_[0]));
     }
 }
+
+########################################
 
 # return a Patro::Nx object appropriate for the
 # object metadata (containing id, ref, reftype values) and client.
@@ -216,6 +223,10 @@ sub deserialize_response {
 						   $_, $response->{meta}),
 				      @{$response->{response}} ];
 	}
+    }
+    if ($response->{out}) {
+	$response->{out} = [ map depatrol($client,$_,$response->{meta}),
+			     @{$response->{out}} ];
     }
     return $response;
 }

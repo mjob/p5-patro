@@ -446,6 +446,7 @@ sub process_request {
     my $ctx = $request->{context};
     my @orig_args = $has_args ? @$args : ();
     my @orig_refs = $has_args ? \ (@$args) : ();
+    my @orig_dump = map Patro::LeumJelly::serialize([$_]), @$args;
     local $! = 0;
     local $? = 0;
     local $SIDES = {};
@@ -482,9 +483,18 @@ sub process_request {
     $sides->{child_error} = $? if $?;
     $sides->{error} = $@ if $@;
 
+    # how to update elements of @_ that have changes?
+    # three implementations below. Pick one.
+    #   1. "side A" - return all elements of @_. You will have to
+    #      filter out "Modification of a read-only element attempted ..."
+    #      messages
+    #   2. "side B" - do a deep comparison of original and final
+    #      elements of @_, return the ones that mismatch
+    #   3. original implementation - do shallow comparison of original
+    #      and final elements of @_. Insufficient for code that updates
+    #      nested data of the inputs
     my (@out,@outref);
-
-    if (1) {
+    if (0) {
 	# "sideA" - always return updates for all arguments
 	for (my $i=0; $i<@orig_refs; $i++) {
 	    last if $SIDES->{no_out};
@@ -495,34 +505,21 @@ sub process_request {
 		}
 	    }
 	}
-#	for (my $i=0; $i<@orig_args; $i++) {
-#	    push @out, $i, $args->[$i];
-#	}
 	$sides->{sideA} = 1;
-    } elsif (1) {    
-	for (my $i=0; $i<@orig_refs; $i++) {
-	    last if $SIDES->{no_out};
-	    no warnings 'uninitialized';
-	    for (my $j=0; $j<@$args; $j++) {
-		if ($orig_refs[$i] eq \$args->[$j]) {
-		    my $rt_orig = reftype($orig_args[$i]) // '';
-		    my $rt = reftype($args->[$j]) // '';
-		    if ('SCALAR' eq $rt_orig) {
-			if ('SCALAR' eq $rt && ${$orig_args[$i]} ne ${$args->[$j]}) {
-			    push @outref, $i, ${$args->[$j]};
-			} elsif (CORE::ref($args->[$i]) eq '') {
-			    push @outref, $i, $args->[$j];
-			}
-		    } elsif ($orig_args[$i] ne $args->[$j]
-			     || defined($orig_args[$i]) != defined($args->[$j])) {
-			push @out, $i, $args->[$j];
-		    }
-		    last;
+    } else {
+	# "sideB" - do a deep compare for all arguments
+	for (my $j=0; $j<@$args && !$SIDES->{no_out}; $j++) {
+	    my $dj = Patro::LeumJelly::serialize([$args->[$j]]);
+	    for (my $i=0; $i<@orig_refs; $i++) {
+		next if $orig_refs[$i] != \$args->[$j];
+		if ($orig_dump[$i] ne $dj) {
+		    push @out, $i, $args->[$j];
 		}
 	    }
 	}
+	$sides->{sideB} = 1;
     }
-    
+
     $sides->{out} = \@out if @out;
     $sides->{outref} = \@outref if @outref;
     if ($ctx >= 2) {
@@ -922,7 +919,9 @@ sub serialize_response {
 	}
     }
 
-    # TODO: call patrol() on side-effects
+    if ($resp->{out}) {
+	$resp->{out} = [ map patrol($self,$resp,$_), @{$resp->{out}} ];
+    }
     
     $resp = Patro::LeumJelly::serialize($resp);
     return $resp;
