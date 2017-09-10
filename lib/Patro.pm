@@ -25,6 +25,10 @@ BEGIN {
 	$Patro::read_sysread_flag = 'read?';
     }
     *CORE::GLOBAL::ref = \&Patro::ref;
+    *CORE::GLOBAL::truncate = \&Patro::_truncate;
+    *CORE::GLOBAL::stat = \&Patro::_stat;
+    *CORE::GLOBAL::flock = \&Patro::_flock;
+    *CORE::GLOBAL::fcntl = \&Patro::_fcntl;
 }
 
 sub import {
@@ -186,6 +190,35 @@ sub getProxies {
     return wantarray ? @{$patro->{objs}} : $patro->{objs}[0];
 }
 
+########################################
+
+sub _truncate {
+    my ($fh,$len) = @_;
+    if (CORE::ref($fh) eq 'Patro::N5') {
+	return $fh->_tied->__('TRUNCATE',1,$len);
+    } else {
+	return CORE::truncate($fh,$len);
+    }
+}
+
+sub _fcntl {
+    my ($fh,$func,$scalar) = @_;
+    if (CORE::ref($fh) eq 'Patro::N5') {
+	return $fh->_tied->__('FCNTL',1,$func,$scalar);
+    } else {
+	return CORE::fcntl($fh,$func,$scalar);
+    }
+}
+
+sub _stat {
+    my ($fh) = @_;
+    if (CORE::ref($fh) eq 'Patro::N5') {
+	my $context = defined(wantarray) + wantarray + 0;
+	return $fh->_tied->__('STAT',$context);
+    } else {
+	return CORE::stat $fh;
+    }
+}
 
 1;
 
@@ -339,11 +372,6 @@ server's user id. Or worse, a client could open a pipe through the handle
 to run an arbitrary command on the server. C<open> and C<close> operations
 on proxy filehandles will not be allowed unless the process running the
 Patro server imports C<Patro> with the C<:insecure> tag.
-
-Certain operations are not currently supported through proxy filehandles:
-C<truncate PROXY_FH,LENGTH>, C<flock PROXY_FH,OPERATION>,
-C<fcntl PROXY_FH,FUNCTION,SCALAR>, C<stat PROXY_FH>, and C<-X PROXY_FH>.
-
 
 =back
 

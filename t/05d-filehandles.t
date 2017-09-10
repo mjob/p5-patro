@@ -101,6 +101,30 @@ ok(!$z, 'close remote command through proxy filehandle')
     or ::xdiag([$z,$!]);
 ok_threaded($? == 256, 'set $? from remote command') or diag $?;
 
+$z = open $p6, '+>>', 't/t-05d.out';
+ok($z, 'reopen random access');
+
+my $z1 = stat $p6;
+ok($z1, 'scalar stat on proxy filehandle') or diag $z1;
+my @z1 = stat $p6;
+ok(@z1 > 0, 'list stat on proxy filehandle') or diag @z1;
+
+$z = truncate $p6, 10;
+ok($z, 'truncate proxy filehandle ok');
+
+$z = -s $p6;
+ok($z == 10, '-s proxy_fh ok, truncate effective') or diag $z;
+
+$z = -r $p6;
+ok($z, 'proxy_fh is readable');
+$z = -w $p6;
+ok($z, 'proxy_fh is writeable');
+
+$z = close $p6;
+ok($z, 'close file again');
+ok(10 == -s 't/t-05d.out', 'truncate effective');
+
+
 
 done_testing;
 

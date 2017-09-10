@@ -809,6 +809,27 @@ sub process_request_HANDLE {
 	    select $fh_sel;
 	}
 	return $z;
+    }
+    # commands that are not in the tied filehandle 
+    elsif ($command eq 'TRUNCATE') {
+	my $z = truncate $fh, $args->[0];
+	return $z;
+    } elsif ($command eq 'FCNTL') {
+	my $z = fcntl $fh, $args->[0], $args->[1];
+	return $z;
+    } elsif ($command eq 'FLOCK') {
+	my $z = flock $fh, $args->[0];
+	return $z;
+    } elsif ($command eq 'STAT') {
+	if ($context < 2) {
+	    return scalar stat $fh;
+	} else {
+	    return stat $fh;
+	}
+    } elsif ($command eq '-X') {
+	my $key = $args->[0];
+	return eval "-$key \$fh";
+	
     } else {
 	$@ = "tied HANDLE function '$command' not found";
 	return;

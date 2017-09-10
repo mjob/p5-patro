@@ -4,11 +4,12 @@ use warnings;
 
 # Patro::N5. Proxy class for GLOB type references.
 
-# we must keep this namespace very clean
+# we must keep this namespace very clean   <--- is this true for GLOB?
 use Carp ();
 
 use overload
     '*{}' => sub { ${$_[0]}->{handle} },
+    '-X' => \&dash_X,
     'nomethod' => \&Patro::LeumJelly::overload_handler,
     ;
 
@@ -24,10 +25,22 @@ foreach my $umethod (keys %UNIVERSAL::) {
     };
 }
 
+sub dash_X {
+    # if we do need to keep the namespace clean, we can move this to Patro::N5x
+    return $_[0]->_tied->__('-X',1,$_[1]);
+}
+
+sub _tied {
+    my $n5 = shift;
+    return tied(*{${$n5}->{handle}});
+}
+
 sub AUTOLOAD {
     my $method = $Patro::N5::AUTOLOAD;
     $method =~ s/.*:://;
 
+    # is this useful with GLOB type?
+    
     my $self = shift;
     my $has_args = @_ > 0;
     my $args = [ @_ ];
