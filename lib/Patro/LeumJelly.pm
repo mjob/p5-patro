@@ -150,7 +150,6 @@ sub proxy_request {
 	croak $resp->{error};
     }
     if (exists $resp->{disconnect_ok}) {
-#	::xdiag("client: disconnect_ok received. Response is ",$resp);
 	return $resp;
     }
 
@@ -161,6 +160,10 @@ sub proxy_request {
 	    my $val = $resp->{out}[$i++];
 	    eval { $_[$index] = $val };
 	    if ($@) {
+		next if $resp->{sideA} &&
+		    $@ =~ /Modification of a read-only .../ &&
+		    $_[$index] eq $val;
+		::xdiag("failed ",[ $_[$index], $val ]);
 		croak $@;
 	    }
 	}

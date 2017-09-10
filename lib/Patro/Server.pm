@@ -413,6 +413,10 @@ sub request_response_loop {
     return;
 }
 
+our $SIDES;    # for the server to activate or suppress some
+               # side-effects from the lower levels of the
+               # request handler
+
 sub process_request {
     my ($self,$request) = @_;
     croak "process_request: expected scalar request" if ref($request);
@@ -444,6 +448,7 @@ sub process_request {
     my @orig_refs = $has_args ? \ (@$args) : ();
     local $! = 0;
     local $? = 0;
+    local $SIDES = {};
     my @r;
 
     if ($topic eq 'META') {
@@ -478,26 +483,48 @@ sub process_request {
     $sides->{error} = $@ if $@;
 
     my (@out,@outref);
-    for (my $i=0; $i<@orig_refs; $i++) {
-	no warnings 'uninitialized';
-	if ($orig_refs[$i] eq \$args->[$i]) {
-	    my $rt_orig = reftype($orig_args[$i]) // '';
-	    my $rt = reftype($args->[$i]) // '';
-	    if ('SCALAR' eq $rt_orig) {
-		if ('SCALAR' eq $rt && ${$orig_args[$i]} ne ${$args->[$i]}) {
-		    push @outref, $i, ${$args->[$i]};
-		} elsif (CORE::ref($args->[$i]) eq '') {
-		    push @outref, $i, $args->[$i];
+
+    if (1) {
+	# "sideA" - always return updates for all arguments
+	for (my $i=0; $i<@orig_refs; $i++) {
+	    last if $SIDES->{no_out};
+	    for (my $j=0; $j<@$args; $j++) {
+		if ($orig_refs[$i] eq \$args->[$j]) {
+		    push @out, $i, $args->[$j];
+		    last;
 		}
-	    } elsif ($orig_args[$i] ne $args->[$i]
-		         || defined($orig_args[$i]) != defined($args->[$i])) {
-		push @out, $i, $args->[$i];
+	    }
+	}
+#	for (my $i=0; $i<@orig_args; $i++) {
+#	    push @out, $i, $args->[$i];
+#	}
+	$sides->{sideA} = 1;
+    } elsif (1) {    
+	for (my $i=0; $i<@orig_refs; $i++) {
+	    last if $SIDES->{no_out};
+	    no warnings 'uninitialized';
+	    for (my $j=0; $j<@$args; $j++) {
+		if ($orig_refs[$i] eq \$args->[$j]) {
+		    my $rt_orig = reftype($orig_args[$i]) // '';
+		    my $rt = reftype($args->[$j]) // '';
+		    if ('SCALAR' eq $rt_orig) {
+			if ('SCALAR' eq $rt && ${$orig_args[$i]} ne ${$args->[$j]}) {
+			    push @outref, $i, ${$args->[$j]};
+			} elsif (CORE::ref($args->[$i]) eq '') {
+			    push @outref, $i, $args->[$j];
+			}
+		    } elsif ($orig_args[$i] ne $args->[$j]
+			     || defined($orig_args[$i]) != defined($args->[$j])) {
+			push @out, $i, $args->[$j];
+		    }
+		    last;
+		}
 	    }
 	}
     }
+    
     $sides->{out} = \@out if @out;
     $sides->{outref} = \@outref if @outref;
-
     if ($ctx >= 2) {
 	return $self->list_response($sides, @r);
     } elsif ($ctx == 1 && defined $r[0]) {
@@ -611,6 +638,7 @@ sub process_request_ARRAY {
 	    }
 	}
 	my @val = splice @{$obj}, $off, $len, @list;
+	$SIDES->{no_out} = 1; # don't try to update @_
 	# SPLICE is the only ARRAY function that doesn't assume scalar context
 	if ($ctx == 1) {
 	    return @val > 0 ? $val[-1] : undef;

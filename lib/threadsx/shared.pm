@@ -47,6 +47,7 @@ sub _tie_SPLICE {
     my ($tied,$off,$len,@list) = @_;
     my @bav = B::AV::ARRAY($tied);
     my $arraylen = 0 + @bav;
+#   ::xdiag("SPLICE \@A,$off,$len/$arraylen,\@B:" . (0+@list));
 
     $off ||= 0;
     if ($off < 0) {
@@ -66,9 +67,9 @@ sub _tie_SPLICE {
 	    $len = 0;
 	}
     }
-    if ($len > $arraylen) {
-	$len = $arraylen;
-    }
+#    if ($off+$len > $arraylen) {
+#	$len = $arraylen-$off;
+#    }
 
     my (@tmp, @val);
 
@@ -77,6 +78,7 @@ sub _tie_SPLICE {
 	push @tmp, $$fetched;
     }
     for (my $i=0; $i<$len; $i++) {
+	last if $i+$off > $arraylen;
 	my $fetched = $bav[$i+$off]->object_2svref;
 	push @val, defined($fetched) && $$fetched;
     }

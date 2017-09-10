@@ -11,6 +11,12 @@ sub foo::enoent { open my $zh, "<", "/a/bogus:file/that/doesn't/exist"; 11 }
 
 sub foo::manip { my $self=shift;my $c = pop; $_[1] *= 4; 13 }
 sub foo::manip2 { my $self=shift;shift @_ for 1..5; $_[1] = 47; 7 }
+sub foo::manip3 { 
+		  my $self=shift; 
+		  $_[0]->[$_[1]][$_[2]]++;
+		  4
+}
+sub foo::manip4 { my $self=shift; $_[0]->[$_[1]] = $_[2] ; 'huzzah' }
 
 my $c1 = \&sqr;
 my $c2 = bless {}, 'foo';
@@ -46,5 +52,16 @@ $z = eval { $p2->manip2(@a4) };
 ok($z == 7, 'proxy method call');
 ok($a4[6] == 47, '... that manipulates args');
 ok($a4[19] == 20, '... and leaves other args alone');
+
+my $a5 = [[1,2,3],[4,5,6],[7,8,9]];
+$z = eval { $p2->manip3($a5, 2, 1) };
+ok($z == 4, 'proxy method call') or ::xdiag([$z,$@]);
+ok($a5->[2][1] == 9, '... that manipulates nested data')
+    or ::xdiag($a5);
+
+my $a6 = [1,2,3,4,5];
+$z = eval { $p2->manip4($a6, 3, 17) };
+ok($z eq 'huzzah', 'proxy method call');
+ok($a6->[3] == 17, '... that manipulates nested data');
 
 done_testing;
