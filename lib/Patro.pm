@@ -9,7 +9,7 @@ use Carp;
 use base 'Exporter';
 our @EXPORT = qw(patronize getProxies);
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 
 BEGIN {
     if (defined &CORE::read) {
@@ -259,7 +259,7 @@ Patro - proxy access to remote objects
 
 =head1 VERSION
 
-0.13
+0.14
 
 
 =head1 SYNOPSIS
