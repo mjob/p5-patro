@@ -56,8 +56,13 @@ if ($THREADED) {
     is(xjoin($r0),xjoin($r1),"local and remote object match after function call");
 }
 is($r1->[4],$r1->get(4), 'remote function call ok');
-ok_threaded($r0->get(-2) == $r1->get(-2),
-	    'local function call same as remote function call');
+ SKIP: {
+     if ($c->{config}{style} ne 'threaded') {
+	 skip("update to proxy won't affect remote on non-threaded server",1);
+     }
+     ok($r0->get(-2) == $r1->get(-2),
+	'local function call same as remote function call');
+}
 
 my @x = $r1->context_dependent;
 my $x = $r1->context_dependent;

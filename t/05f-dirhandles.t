@@ -36,7 +36,7 @@ my $f = readdir $p9;
 ok($f eq '.' || $f eq '..' || $f =~ /[tm]$/,
    'read file name from proxy dirhandle');
 my $t = telldir $p9;
-ok($t == 1, 'telldir from proxy dirhandle correct after 1 read');
+ok($t > 0, 'telldir from proxy dirhandle nonzero after 1 read');
 my @f = readdir $p9;
 ok(@f > 5, 'readdir from proxy dirhandle in list context');
 my $c = grep { !/t$/ } $f, @f;
@@ -46,11 +46,18 @@ my $t2 = telldir $p9;
 ok($z && $t2 == $t, 'seekdir through proxy dirhandle');
 $z = rewinddir $p9;
 ok($z, 'rewinddir through proxy dirhandle');
-ok(0 == telldir $p9, 'rewinddir makes telldir return 0');
+ok(0 == telldir($p9), 'rewinddir makes telldir return 0');
 my $f2 = readdir $p9;
 ok($f eq $f2, 'readdir after rewinddir returns same file as first read');
-$z = closedir $p9;
-ok($z, 'closedir on proxy dirhandle');
+
+ SKIP: {
+     $z = closedir $p9;
+     my $cc = Patro::client($p9);
+     if ($cc->{config}{style} ne 'threaded') {
+	 skip("closedir may not work on forked server?",1);
+     }
+     ok($z, 'closedir on proxy dirhandle');
+}
 
 local $! = 0;
 $f2 = readdir $p9;

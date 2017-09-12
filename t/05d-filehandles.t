@@ -99,7 +99,12 @@ ok(!$line, 'exhausted output from remote command');
 $z = close $p6;
 ok(!$z, 'close remote command through proxy filehandle')
     or ::xdiag([$z,$!]);
-ok_threaded($? == 256, 'set $? from remote command') or diag $?;
+ SKIP: {
+     if ($c->{config}{style} ne 'threaded') {
+	 skip('$? won\'t get set on non-threaded server', 1);
+     }     
+     ok($? == 256, 'set $? from remote command') or diag $?;
+}
 
 $z = open $p6, '+>>', 't/t-05d.out';
 ok($z, 'reopen random access');

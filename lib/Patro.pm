@@ -52,19 +52,6 @@ sub import {
 	    require Patro::Server;
 	    Patro::Server->TEST_MODE;
 
-	    # some tests will check if the remote object has changed
-	    # after being manipulated by the proxy. This can only
-	    # happen with a threaded server (or with certain objects
-	    # that do not maintain state in local memory), so we should
-	    # skip those tests if we are using the forked server.
-	    *ok_threaded = sub {
-		if ($Patro::Server::threads_avail) {
-		    goto &Test::More::ok;
-		} else {
-		    Test::More::ok(1, $_[1] ? "$_[1] - SKIPPED" :
-		       "skip test that requires threaded server");
-		}
-	    };
 	    # a poor man's Data::Dumper, but works for Patro::N objects.
 	    *xjoin = sub {
 		join(",", map { my $r = $_;
@@ -74,7 +61,7 @@ sub import {
 			"{".xjoin(map{"$_:'".$r->{$_}."'"}sort keys %$r)."}" 
 				} : $_ } @_)
 	    };
-	    push @EXPORT, 'ok_threaded', 'xjoin';
+	    push @EXPORT, 'xjoin';
 	}
 	if ($tag eq ':insecure') {
 	    $Patro::SECURE = 0;
