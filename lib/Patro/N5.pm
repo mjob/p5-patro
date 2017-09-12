@@ -59,7 +59,7 @@ sub DESTROY {
 	      topic => 'META',
 	      #command => 'disconnect' } );
 	      command => 'destroy' } );
-	if ($response->{disconnect_ok}) {
+	if (!CORE::ref($response) || $response->{disconnect_ok}) {
 	    close $socket;
 	    delete $$self->{socket};
 	}

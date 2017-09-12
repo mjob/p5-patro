@@ -50,19 +50,21 @@ ok(0 == telldir($p9), 'rewinddir makes telldir return 0');
 my $f2 = readdir $p9;
 ok($f eq $f2, 'readdir after rewinddir returns same file as first read');
 
+$z = closedir $p9;
  SKIP: {
-     $z = closedir $p9;
      my $cc = Patro::client($p9);
      if ($cc->{config}{style} ne 'threaded') {
-	 skip("closedir may not work on forked server?",1);
+	 skip("closedir may not work on forked server?",2);
      }
      ok($z, 'closedir on proxy dirhandle');
+     local $! = 0;
+     $f2 = readdir $p9;
+     ok(!defined($f2) && $!, 'readdir on closed proxy dirhandle fails');
 }
 
-local $! = 0;
-$f2 = readdir $p9;
-ok(!defined($f2) && $!, 'readdir on closed proxy dirhandle fails');
-
 $z = opendir $p9, 't';
+ok($z, 'opendir on proxy filehandle');
+$z= chdir $p9;
+ok($z, 'chdir on proxy dirhandle');
 
 done_testing;

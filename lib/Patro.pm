@@ -324,6 +324,14 @@ sub _rewinddir (*) {
     return CORE::rewinddir($fh);
 }
 
+sub _chdir (;$) {
+    my ($fh) = @_;
+    if ($fh && CORE::ref($fh) eq 'Patro::N5') {
+	return $fh->_tied->__('CHDIR',1);
+    }
+    return CORE::chdir($fh);
+}
+
 1;
 
 =head1 NAME
