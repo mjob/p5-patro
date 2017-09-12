@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use threads::shared;
 
-our $VERSION = '0.14';
+our $VERSION = '0.15';
 
 ######################################################################
 #
@@ -233,7 +233,7 @@ threadsx::shared - useful extensions to threads::shared
 
 =head1 VERSION
 
-0.14
+0.15
 
 =head1 DESCRIPTION
 
@@ -246,7 +246,7 @@ for sharing data structures between threads
 
 =head1 VERSION
 
-This document describes threadsx::shared version 0.14
+This document describes threadsx::shared version 0.15
 
 =head1 DESCRIPTION
 

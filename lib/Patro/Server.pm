@@ -14,7 +14,7 @@ if ($ENV{PATRO_SERVER_DEBUG}) {
     *sxdiag = *::xdiag;
     our $DEBUG = 1;
 }
-our $VERSION = '0.14';
+our $VERSION = '0.15';
 our @SERVERS :shared;
 our %OPTS = ( # XXX - needs documentation
     keep_alive => 30,
@@ -1089,7 +1089,7 @@ Patro::Server - remote object server for Patro
 
 =head1 VERSION
 
-0.14
+0.15
 
 =head1 DESCRIPTION
 
