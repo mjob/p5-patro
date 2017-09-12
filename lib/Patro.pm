@@ -1,7 +1,7 @@
 package Patro;
 use strict;
 use warnings;
-use Patro::Archy;
+use Patro::Mony;
 use Patro::LeumJelly;
 use Scalar::Util;
 use Data::Dumper;
@@ -21,8 +21,8 @@ sub import {
     $Patro::SECURE = 1;
     foreach my $tag (@tags) {
 	if ($tag eq ':test') {
-	    require Patro::Server;
-	    Patro::Server->TEST_MODE;
+	    require Patro::Archy;
+	    Patro::Archy->TEST_MODE;
 
 	    # a poor man's Data::Dumper, but works for Patro::N objects.
 	    *xjoin = sub {
@@ -46,11 +46,11 @@ sub import {
     }		
     eval "use threads;1";
     eval "use threadsx::shared";
-    $Patro::Server::threads_avail = $threads::threads;
+    $Patro::Archy::threads_avail = $threads::threads;
     if (!defined &threads::tid) {
 	*threads::tid = sub { 0 };
     }
-    if ($ENV{PATRO_THREADS} && !$Patro::Server::threads_avail) {
+    if ($ENV{PATRO_THREADS} && !$Patro::Archy::threads_avail) {
 	warn "Threaded Patro server was requested but was not available\n";
     }
     Patro->export_to_level(1, 'Patro', @args, @EXPORT);
@@ -61,8 +61,8 @@ sub nize { goto &patronize }
 
 sub patronize {
     croak 'usage: Patro::patronize(@refs)' if @_ == 0;
-    require Patro::Server;
-    my $server = Patro::Server->new({}, @_);
+    require Patro::Archy;
+    my $server = Patro::Archy->new({}, @_);
     return $server->{config};
 }
 
