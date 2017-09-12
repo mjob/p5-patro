@@ -8,8 +8,14 @@ use warnings;
 use Carp ();
 
 use overload
-    '%{}' => sub { ${$_[0]}->{hash} },
+    '%{}' => sub {
+	if (${$_[0]}->{overloads}{'%{}'} ) {
+	    return Patro::LeumJelly::deref_handler(@_,'%{}');
+	}
+	${$_[0]}->{hash}
+    },
     'nomethod' => \&Patro::LeumJelly::overload_handler,
+    '@{}' => sub { return Patro::LeumJelly::deref_handler(@_,'@{}') },
     ;
 
 # override UNIVERSAL methods

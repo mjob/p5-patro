@@ -133,9 +133,12 @@ $make_shared = sub {
 	my $ccc = {};
 	$copy = &threads::shared::share( $ccc );
 	$cloned->{$addr} = $copy;
+	my $ref = CORE::ref($item);
+	if ($ref) { bless $item, '###' }    # in case $item overloads %{}
 	while (my ($k,$v) = each %$item) {
 	    $copy->{$k} = $make_shared->($v,$cloned);
 	}
+	if ($ref) { bless $item, $ref }
     } elsif ($ref_type eq 'SCALAR') {
 	$copy = \do{ my $scalar = $$item };
 	threads::shared::share($copy);
