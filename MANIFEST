@@ -26,6 +26,7 @@ t/05b-filehandles.t
 t/05c-filehandles.t
 t/05d-filehandles.t
 t/05e-filehandles.t
+t/05f-dirhandles.t
 t/06-ref.t
 t/09-config.t
 t/11-ScalarObj.t

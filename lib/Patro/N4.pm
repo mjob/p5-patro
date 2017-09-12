@@ -18,7 +18,8 @@ foreach my $umethod (keys %UNIVERSAL::) {
     *{$umethod} = sub {
 	my $proxy = shift;
 	if (!CORE::ref($proxy)) {
-	    package UNIVERSAL;
+	    package
+		UNIVERSAL;
 	    return &$umethod($proxy,@_);
 	}
 	my $context = defined(wantarray) ? 1 + wantarray : 0;

@@ -829,9 +829,48 @@ sub process_request_HANDLE {
 	} else {
 	    return stat $fh;
 	}
+    } elsif ($command eq 'LSTAT') {
+	if ($context < 2) {
+	    return scalar lstat $fh;
+	} else {
+	    return lstat $fh;
+	}
     } elsif ($command eq '-X') {
 	my $key = $args->[0];
 	return eval "-$key \$fh";
+    } elsif ($command eq 'SYSOPEN') {
+	if ($Patro::SECURE) {
+	    $@ = "Patro: insecure SYSOPEN operation on proxy filehandle";
+	    return;
+	}
+        my $z = @$args <= 2 ? sysopen $fh, $args->[0], $args->[1]
+                      : sysopen $fh, $args->[0], $args->[1], $args->[2];
+        return $z;
+
+    # commands that operate on DIRHANDLEs
+    } elsif ($command eq 'OPENDIR') {
+        if ($Patro::SECURE) {
+            $@ = "Patro: insecure OPENDIR operation on proxy dirhandle";
+            return;
+        }
+        return opendir $fh, $args->[0];
+    } elsif ($command eq 'REWINDDIR') {
+        return rewinddir $fh;
+    } elsif ($command eq 'TELLDIR') {
+        return telldir $fh;
+    } elsif ($command eq 'READDIR') {
+        if ($context < 2) {
+            return scalar readdir $fh;
+        } else {
+            my @r = readdir $fh;
+            return @r;
+        }
+    } elsif ($command eq 'SEEKDIR') {
+        return seekdir $fh, $args->[0];
+    } elsif ($command eq 'CLOSEDIR') {
+        return closedir $fh;
+    } elsif ($command eq 'CHDIR') {
+        return chdir $fh;
 	
     } else {
 	$@ = "tied HANDLE function '$command' not found";
