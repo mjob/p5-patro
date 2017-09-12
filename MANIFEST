@@ -1,6 +1,7 @@
 # MANIFEST for p5-patro
 Changes
 lib/Patro.pm
+lib/Patro/Archy.pm
 lib/Patro/LeumJelly.pm
 lib/Patro/N1.pm
 lib/Patro/N2.pm
