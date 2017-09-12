@@ -73,14 +73,15 @@ sub import {
     if (defined($ENV{PATRO_THREADS}) &&
 	!$ENV{PATRO_THREADS}) {
 	$INC{'threads.pm'} = 1;
-	*threads::tid = sub { 0 };
     }		
     eval "use threads;1";
     eval "use threadsx::shared";
     $Patro::Server::threads_avail = $threads::threads;
-    if (defined $ENV{PATRO_THREADS}) {
-	no warnings 'redefine';
-	$Patro::Server::threads_avail = $ENV{PATRO_THREADS};
+    if (!defined &threads::tid) {
+	*threads::tid = sub { 0 };
+    }
+    if ($ENV{PATRO_THREADS} && !$Patro::Server::threads_avail) {
+	warn "Threaded Patro server was requested but was not available\n";
     }
     Patro->export_to_level(1, 'Patro', @args, @EXPORT);
 }
@@ -95,13 +96,14 @@ sub patronize {
     return $server->{config};
 }
 
-sub ref {
-    my $ref = CORE::ref($_[0]);
+sub ref (_) {
+    my $obj = @_ ? $_[0] : $_;
+    my $ref = CORE::ref($obj);
     if (!Patro::LeumJelly::isProxyRef($ref)) {
 	return $ref;
     }
-    my $handle = Patro::LeumJelly::handle($_[0]);
-    return $handle->{ref};
+    my $handle = Patro::LeumJelly::handle($obj);
+    return _fetch($handle, "ref");
 }
 
 sub reftype {
@@ -110,26 +112,54 @@ sub reftype {
 	return Scalar::Util::reftype($_[0]);
     }
     my $handle = Patro::LeumJelly::handle($_[0]);
-    return $handle->{reftype};
+    return _fetch($handle, "reftype");
+}
+
+sub _allrefs {
+    return (CORE::ref($_[0]), Patro::ref($_[0]),
+	    Scalar::Util::reftype($_[0]), Patro::reftype($_[0]));
 }
 
 sub client {
     if (!Patro::LeumJelly::isProxyRef(CORE::ref($_[0]))) {
 	return;     # not a remote proxy object
     }
-    return Patro::LeumJelly::handle($_[0])->{client};
+    return _fetch(Patro::LeumJelly::handle($_[0]),"client");
+}
+
+sub _fetch {
+    # _fetch HASH, LIST
+    #     where HASH is an object that overloads the '%{}' 
+    #     operator, temporarily unbless it, fetch values for
+    #     one or more keys, and restore the original blessing.
+    #     Returns the retrieved values.
+    
+    my ($hash, @keys) = @_;
+    my $ref = CORE::ref($hash);
+    my @r;
+    if (!$ref) {
+	@r = @{$hash}{@keys};
+    } else {
+	bless $hash, '###';
+	@r = @{$hash}{@keys};
+	bless $hash, $ref;
+    }
+    return wantarray ? @r : @r > 0 ? $r[-1] : undef;
 }
 
 sub main::xdiag {
+    my @lt = localtime;
+    my $lt = sprintf "%02d:%02d:%02d", @lt[2,1,0];
+    my $pid = $$;
+    $pid .= "-" . threads->tid if $threads::threads;
+    my @msg = map { CORE::ref($_)
+		        ? CORE::ref($_) =~ /^Patro::N/
+			? "<" . CORE::ref($_) . ">"
+			: Data::Dumper::Dumper($_) : $_ } @_;
     if ($INC{'Test/More.pm'}) {
-	my @lt = localtime;
-	my $lt = sprintf "%02d:%02d:%02d", @lt[2,1,0];
-	my $pid = $$;
-	$pid .= "-" . threads->tid if $threads::threads;
-	Test::More::diag("xdiag $pid $lt: ",
-	    map { CORE::ref($_) ? Data::Dumper::Dumper($_) : $_ } @_ );
+	Test::More::diag("xdiag $pid $lt: ",@msg);
     } else {
-	print STDERR "xdiag: ", Data::Dumper::Dumper(@_),"\n";
+	print STDERR "xdiag $pid $lt: @msg\n";
     }
 }
 
@@ -558,10 +588,9 @@ C<Patro> will use threads if the L<threads> module can be loaded.
 
 =head1 LIMITATIONS
 
-Proxy filehandles use the C<tie> mechanism for filehandles, so
-C<sysopen>, C<truncate>, C<flock>, C<fcntl>, C<stat HANDLE>,
-and C<-X HANDLE> functions are not supported on proxy filehandles,
-as documented in L<perltie>.
+The C<-X> file test operations on a proxy filehandle depend on
+the file test implementation in L<overload>, which is available
+only in Perl v5.12 or better.
 
 When the server uses forks (because threads are unavailable or
 because L<"PATRO_THREADS"> was set to a false value), it is less

@@ -112,13 +112,19 @@ ok(@z1 > 0, 'list stat on proxy filehandle') or diag @z1;
 $z = truncate $p6, 10;
 ok($z, 'truncate proxy filehandle ok');
 
-$z = -s $p6;
-ok($z == 10, '-s proxy_fh ok, truncate effective') or diag $z;
+# -X on a proxy filehandle requires v5.12
+ SKIP: {
+     if ($] < 5.012000) {
+	 skip("-X on proxy handle requires Perl v5.12", 3);
+     }
+     $z = -s $p6;
+     ok($z == 10, '-s proxy_fh ok, truncate effective') or diag $z;
 
-$z = -r $p6;
-ok($z, 'proxy_fh is readable');
-$z = -w $p6;
-ok($z, 'proxy_fh is writeable');
+     $z = -r $p6;
+     ok($z, 'proxy_fh is readable');
+     $z = -w $p6;
+     ok($z, 'proxy_fh is writeable');
+}
 
 $z = close $p6;
 ok($z, 'close file again');

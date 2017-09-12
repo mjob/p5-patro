@@ -1,8 +1,12 @@
 Revision history for Patro
 --------------------------
 
-0.13	...
-	the next great thing to happen to Patro
+0.13	2017-09-11
+        - Support for proxies to REF type objects and references
+	- Support filehandle functions like truncate, flock, etc.
+	  on proxy filehandles
+	- Better support for side-effects of proxy function calls
+        - removed Patro/CODE/Shareable.pm
 
 0.12	2017-09-08
 	- Support for most common ops with proxy filehandles

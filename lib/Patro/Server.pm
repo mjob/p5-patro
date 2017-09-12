@@ -12,8 +12,8 @@ our $threads_avail;
 *sxdiag = sub {};
 if ($ENV{PATRO_SERVER_DEBUG}) {
     *sxdiag = *::xdiag;
+    our $DEBUG = 1;
 }
-
 our $VERSION = '0.13';
 our @SERVERS :shared;
 our %OPTS = ( # XXX - needs documentation
@@ -451,6 +451,8 @@ sub process_request {
     local $? = 0;
     local $SIDES = {};
     my @r;
+    our $DEBUG;
+    local $DEBUG = $DEBUG || $request->{_debug} || 0;
 
     if ($topic eq 'META') {
 	@r = $self->process_request_META($id,$cmd,$ctx,$has_args,$args);
@@ -469,6 +471,8 @@ sub process_request {
     } elsif ($topic eq 'OVERLOAD') {
 	my $obj = $self->{obj}{$id};
 	@r = $self->process_request_OVERLOAD($obj,$cmd,$args,$ctx);
+    } elsif ($topic eq 'REF') {
+	@r = $self->process_request_REF($id,$cmd,$ctx,$has_args,$args);
     } else {
 	@r = ();
 	$@ = __PACKAGE__ . ": unrecognized topic '$topic' in proxy request";
@@ -482,6 +486,7 @@ sub process_request {
     $sides->{errno_extended} = $^E if $^E;
     $sides->{child_error} = $? if $?;
     $sides->{error} = $@ if $@;
+    $sides->{"x-requestId"} = ++$Patro::Server::requestId;
 
     # how to update elements of @_ that have changes?
     # three implementations below. Pick one.
@@ -489,43 +494,32 @@ sub process_request {
     #      filter out "Modification of a read-only element attempted ..."
     #      messages
     #   2. "side B" - do a deep comparison of original and final
-    #      elements of @_, return the ones that mismatch
+    #      elements of @_, return the ones that mismatch I CHOOSE YOU!
     #   3. original implementation - do shallow comparison of original
     #      and final elements of @_. Insufficient for code that updates
     #      nested data of the inputs
     my (@out,@outref);
-    if (0) {
-	# "sideA" - always return updates for all arguments
+
+    # "sideB" - do a deep compare for all arguments
+    for (my $j=0; $j<@$args && !$SIDES->{no_out}; $j++) {
+	my $dj = Patro::LeumJelly::serialize([$args->[$j]]);
 	for (my $i=0; $i<@orig_refs; $i++) {
-	    last if $SIDES->{no_out};
-	    for (my $j=0; $j<@$args; $j++) {
-		if ($orig_refs[$i] eq \$args->[$j]) {
-		    push @out, $i, $args->[$j];
-		    last;
-		}
+	    next if $orig_refs[$i] != \$args->[$j];
+	    if ($orig_dump[$i] ne $dj) {
+		push @out, $i, $args->[$j];
 	    }
 	}
-	$sides->{sideA} = 1;
-    } else {
-	# "sideB" - do a deep compare for all arguments
-	for (my $j=0; $j<@$args && !$SIDES->{no_out}; $j++) {
-	    my $dj = Patro::LeumJelly::serialize([$args->[$j]]);
-	    for (my $i=0; $i<@orig_refs; $i++) {
-		next if $orig_refs[$i] != \$args->[$j];
-		if ($orig_dump[$i] ne $dj) {
-		    push @out, $i, $args->[$j];
-		}
-	    }
-	}
-	$sides->{sideB} = 1;
     }
+    $sides->{sideB} = 1;
 
     $sides->{out} = \@out if @out;
     $sides->{outref} = \@outref if @outref;
     if ($ctx >= 2) {
 	return $self->list_response($sides, @r);
     } elsif ($ctx == 1 && defined $r[0]) {
-	return $self->scalar_response($sides, $r[0]);
+	my $y = $self->scalar_response($sides, $r[0]);
+#	if ($topic eq 'REF') { ::xdiag("response:",$y) }
+	return $y;
     } else {
 	return $self->void_response($sides);
     }
@@ -685,7 +679,16 @@ sub process_request_METHOD {
 	return;
     }
     my @r;
-    if ($context < 2) {
+    if ($command =~ /::/) {
+	no strict 'refs';
+	if ($context < 2) {
+	    @r = scalar eval { $has_args ? &$command($obj,@$args)
+				   : &$command($obj) };
+	} else {
+	    @r = eval { $has_args ? &$command($obj,@$args)
+			          : &$command($obj) };
+	}
+    } elsif ($context < 2) {
 	@r = scalar eval { $has_args ? $obj->$command(@$args)
 			             : $obj->$command };
     } else {
@@ -851,6 +854,15 @@ sub process_request_CODE {
 
 sub process_request_OVERLOAD {
     my ($self,$x,$op,$args,$context) = @_;
+    if ($op eq '@{}') { 
+	return \@$x;
+    } elsif ($op eq '%{}') {
+	return \%$x;
+    } elsif ($op eq '&{}') {
+	return \&$x;
+    } elsif ($op eq '${}') {
+	return \$$x;
+    } # elsif ($op eq '*{}') { return \*$x; }
     my ($y,$swap) = @$args;
     if ($swap) {
 	($x,$y) = ($y,$x);
@@ -892,6 +904,20 @@ sub process_request_OVERLOAD {
 	$z = threads::shared::shared_clone($z);
     }
     return $z;
+}
+
+sub process_request_REF {
+    my ($self,$id,$command,$context,$has_args,$args) = @_;
+    my $obj = $self->{obj}{$id};
+    if (reftype($obj) ne 'REF') {
+	$@ = "Not a REF";
+	return;
+    }
+    if ($command eq 'deref') {
+	return $$obj;
+    }
+    $@ = "$command is not an appropriate operation for REF";
+    return;
 }
 
 ########################################
@@ -943,7 +969,8 @@ sub serialize_response {
     if ($resp->{out}) {
 	$resp->{out} = [ map patrol($self,$resp,$_), @{$resp->{out}} ];
     }
-    
+
+    sxdiag("Server: final response before serialization: ",$resp);
     $resp = Patro::LeumJelly::serialize($resp);
     return $resp;
 }
@@ -995,7 +1022,7 @@ sub patrol {
     } else {
 	sxdiag("id $id has been seen before");
     }
-    return \$id;
+    return bless \$id,'.Patrobras';
 }
 
 sub TEST_MODE {

@@ -66,6 +66,7 @@ is(xjoin(\@x),xjoin([5,6,7]), 'context respected in list context');
 
 ok($r1->can('increment'), '$proxy->can ok on valid method name');
 ok(!$r1->can('um, no'), '$proxy->can ok on invalid method name');
+ok(eval { Patro::N4->can('increment'); 1 }, 'Patro::N4->can ok');
 
 my $z = push(@$r1, { abc => 123, foo => 456 });
 ok($z, 'push reference onto proxy ok');

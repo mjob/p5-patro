@@ -17,6 +17,10 @@ foreach my $umethod (keys %UNIVERSAL::) {
     no strict 'refs';
     *{$umethod} = sub {
 	my $proxy = shift;
+	if (!CORE::ref($proxy)) {
+	    package UNIVERSAL;
+	    return &$umethod($proxy,@_);
+	}
 	my $context = defined(wantarray) ? 1 + wantarray : 0;
 	return Patro::LeumJelly::proxy_request( $$proxy,
 	    { id => $$proxy->{id}, topic => 'METHOD', command => $umethod,

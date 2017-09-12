@@ -37,6 +37,7 @@ ok($@ =~ /goodbye/ && $@ =~ /ScalarThing/,
 
 ok($proxy->can('hello'), '$proxy->can ok on valid method name');
 ok(!$proxy->can('later'), '$proxy->can ok on invalid method name');
+ok(eval { Patro::N2->can('later'); 1 }, 'Patro::N2->can ok');
 
 done_testing;
 

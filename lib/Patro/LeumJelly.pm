@@ -13,7 +13,8 @@ my %proxyClasses = (
     'Patro::N2' => 1,    # SCALAR
     'Patro::N3' => 0,    # CODE
     'Patro::N4' => 0,    # ARRAY
-    'Patro::N5' => 0 );  # GLOB
+    'Patro::N5' => 0,    # GLOB
+    'Patro::N6' => 1,);  # REF
 
 sub isProxyRef {
     my ($pkg) = @_;
@@ -22,7 +23,7 @@ sub isProxyRef {
 
 sub handle {
     my ($proxy) = @_;
-    if (CORE::ref($proxy) eq 'Patro::N2') {
+    if ($proxyClasses{ CORE::ref($proxy) }) {
 	return $proxy;
     } else {
 	return ${$proxy};
@@ -72,6 +73,12 @@ sub getproxy {
 	return bless $proxy, 'Patro::N2';
     }
 
+    if ($proxy->{reftype} eq 'REF') {
+	require Patro::N6;
+	bless $proxy, 'Patro::N6';
+	return $proxy;
+    }
+    
     if ($proxy->{reftype} eq 'ARRAY') {
 	require Patro::N4;
 	tie my @a, 'Patro::Tie::ARRAY', $proxy;
@@ -119,12 +126,13 @@ sub getproxy {
 sub proxy_request {
     my $proxy = shift;
     my $request = shift;
-    my $socket = $proxy->{socket};
+    my ($socket,$proxy_id,$_DESTROY,$proxy_client)
+	= Patro::_fetch($proxy,qw(socket id _DESTROY client));
     if (!defined $request->{context}) {
 	$request->{context} = defined(wantarray) ? 1 + wantarray : 0;
     }
     if (!defined $request->{id}) {
-	$request->{id} = $proxy->{id};
+	$request->{id} = $proxy_id;
     }
 
     if ($request->{has_args}) {
@@ -132,7 +140,7 @@ sub proxy_request {
 	# we should convert it to ... what?
 	foreach my $arg (@{$request->{args}}) {
 	    if (isProxyRef(ref($arg))) {
-		my $id = handle($arg)->{id};
+		my $id = Patro::_fetch(handle($arg),"id");
 		$arg = bless \$id, '.Patroon';
 	    }
 	}
@@ -140,7 +148,7 @@ sub proxy_request {
 
     my $sreq = serialize($request);
     my $resp;
-    if ($proxy->{_DESTROY}) {
+    if ($_DESTROY) {
 	no warnings 'closed';
 	print {$socket} $sreq . "\n";
 	$resp = readline($socket);
@@ -152,9 +160,12 @@ sub proxy_request {
 	return serialize({context => 0, response => ""});
     }
     croak if ref($resp);
-    $resp = deserialize_response($resp, $proxy->{client});
+    $resp = deserialize_response($resp, $proxy_client);
     if ($resp->{error}) {
 	croak $resp->{error};
+    }
+    if ($resp->{warn}) {
+	carp $resp->{warn};
     }
     if (exists $resp->{disconnect_ok}) {
 	return $resp;
@@ -233,7 +244,7 @@ sub deserialize_response {
 
 sub depatrol {
     my ($client, $obj, $meta) = @_;
-    if (ref($obj) ne 'SCALAR') {
+    if (CORE::ref($obj) ne '.Patrobras') {
 	return $obj;
     }
     my $id = $$obj;
@@ -243,6 +254,7 @@ sub depatrol {
 	return $client->{proxies}{$id};
     }
     warn "depatrol: reference $id $obj is not referred to in meta";
+    bless $obj, 'SCALAR';
     return $obj;
 }
 
@@ -258,12 +270,13 @@ qw# + - * / % ** << >> += -= *= /= %= **= <<= >>= <=> < <= > >= == != ^ ^=
 sub overload_handler {
     my ($ref, $y, $swap, $op) = @_;
     my $handle = handle($ref);
-    my $overloads = $handle->{overloads};
+    my ($overloads,$handle_id) = Patro::_fetch($handle,"overloads","id");
+
     if ($overloads && $overloads->{$op}) {
 	# operation is overloaded in the remote object.
 	# ask the server to compute the operation result
 	return proxy_request( $handle,
-	    { id => $handle->{id},
+	    { id => $handle_id,
 	      topic => 'OVERLOAD',
 	      command => $op,
 	      has_args => 1,
@@ -307,8 +320,26 @@ sub overload_handler {
     return eval "\$str $op \$y";
 }
 
-sub extend_threads_shared { return }
+sub deref_handler {
+    my $obj = shift;
+    my $op = pop;
 
+    my $handle = handle($obj);
+    my ($overloads,$handle_id) = Patro::_fetch($handle,"overloads","id");
+    if ($overloads && $overloads->{$op}) {
+	# operation is overloaded in the remote object.
+	# ask the server to compute the operation result
+	return proxy_request( $handle,
+	    { id => $handle_id,
+	      topic => 'OVERLOAD',
+	      command => $op,
+	      has_args => 0 } );
+    }
+    if ($op eq '@{}') { croak "Not an ARRAY reference" }
+    if ($op eq '%{}') { croak "Not a HASH reference" }
+    if ($op eq '&{}') { croak "Not a CODE reference" }
+    croak "Patro: invalid dereference $op";
+}
 1;
 
 =head1 NAME

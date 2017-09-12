@@ -9,31 +9,14 @@ use Carp ();
 
 use overload
     '*{}' => sub { ${$_[0]}->{handle} },
-    '-X' => \&dash_X,
+    '-X' => \&Patro::N5x::dash_X,
     'nomethod' => \&Patro::LeumJelly::overload_handler,
     ;
 
-# override UNIVERSAL methods
-foreach my $umethod (keys %UNIVERSAL::) {
-    no strict 'refs';
-    *{$umethod} = sub {
-	my $proxy = shift;
-	my $context = defined(wantarray) ? 1 + wantarray : 0;
-	return Patro::LeumJelly::proxy_request( $$proxy,
-	    { id => $$proxy->{id}, topic => 'METHOD', command => $umethod,
-	      has_args => @_ > 0, args => [ @_ ], context => $context }, @_ );
-    };
-}
+sub _tied { return tied(*{${$_[0]}->{handle}}) }
+sub Patro::N5x::dash_X { return $_[0]->_tied->__('-X',1,$_[1]); }
 
-sub dash_X {
-    # if we do need to keep the namespace clean, we can move this to Patro::N5x
-    return $_[0]->_tied->__('-X',1,$_[1]);
-}
 
-sub _tied {
-    my $n5 = shift;
-    return tied(*{${$n5}->{handle}});
-}
 
 sub AUTOLOAD {
     my $method = $Patro::N5::AUTOLOAD;

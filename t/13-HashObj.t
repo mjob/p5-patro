@@ -59,6 +59,7 @@ ok_threaded(exists $r0->{GHI}, 'remote object call affects local object');
 
 ok($r1->can('uckeys'), '$proxy->can ok on existing method name');
 ok(!$r1->can('blech'), '$proxy->can ok on bogus method name');
+ok(eval { Patro::N1->can('blech'); 1 }, 'Patro::N1->can ok');
 
 done_testing;
 
