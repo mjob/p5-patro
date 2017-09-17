@@ -486,7 +486,6 @@ sub process_request {
     $sides->{errno_extended} = $^E if $^E;
     $sides->{child_error} = $? if $?;
     $sides->{error} = $@ if $@;
-    $sides->{"x-requestId"} = ++$Patro::Archy::requestId;
 
     # how to update elements of @_ that have changes?
     # three implementations below. Pick one.
@@ -893,26 +892,12 @@ sub process_request_CODE {
 
 sub process_request_OVERLOAD {
     my ($self,$x,$op,$args,$context) = @_;
-#    if ($op =~ /\{\}/) {
-#	::xdiag("Archy: OVERLOAD $op for ",CORE::ref($x));
-#    }
     if ($op eq '@{}') {
-
-#	::xdiag("overload \@{} on ",reftype($x),"-type object ",ref($x));
-#	if (overload::Method($x,$op)) {
-#	    ::xdiag(ref($x)," \$x does overload '\@{}'");
-#	} else {
-#	    ::xdiag(ref($x)," \$x does NOT overload '\@{}'");
-#	}
-	
 	my $z = eval { \@$x };
-	$@ &&= Carp::cluck("\n\n$@\n\nwhile deref ARRAY")
-	    && "Not an ARRAY reference";
+	$@ &&= "Not an ARRAY reference";
 	return $z;
     } elsif ($op eq '%{}') {
 	my $z = eval { \%$x };
-	$@ && Carp::cluck($@, " \$x is ", ref($x), "\n",
-			  do {no overloading; "$x" });
 	$@ &&= "Not a HASH reference";
 	return $z;
     } elsif ($op eq '&{}') {

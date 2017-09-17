@@ -1,8 +1,8 @@
 Revision history for Patro
 --------------------------
 
-0.15	...
-	The next great thing to happen to Patro
+0.15	2017-09-17
+	- Support proxies to objects that overload dereference operators
 
 0.14	2017-09-12
 	- Support for proxies to dirhandles through the functions

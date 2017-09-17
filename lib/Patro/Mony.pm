@@ -2,6 +2,9 @@ package Patro::Mony;
 use strict;
 use warnings;
 
+# Repository for functions the Patro distribution
+# will assign in the CORE::GLOBAL namespace.
+
 if (defined &CORE::read) {
     *CORE::GLOBAL::read = sub (*\$$;$) {
 	$Patro::read_sysread_flag = 'read';
@@ -145,5 +148,3 @@ sub _chdir (;$) {
 
 1;
 
-# Repository for functions the Patro distribution
-# will assign in the CORE::GLOBAL namespace.

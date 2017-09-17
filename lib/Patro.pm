@@ -99,9 +99,6 @@ sub client {
 }
 
 sub main::xdiag {
-    our $xdiag_counter;
-    return if $xdiag_counter > 10;
-    $xdiag_counter++;
     my @lt = localtime;
     my $lt = sprintf "%02d:%02d:%02d", @lt[2,1,0];
     my $pid = $$;
@@ -115,7 +112,6 @@ sub main::xdiag {
     } else {
 	print STDERR "xdiag $pid $lt: @msg\n";
     }
-    $xdiag_counter--;
 }
 
 # Patro OO-interface
