@@ -486,7 +486,6 @@ sub process_request {
     $sides->{errno_extended} = $^E if $^E;
     $sides->{child_error} = $? if $?;
     $sides->{error} = $@ if $@;
-    $sides->{"x-requestId"} = ++$Patro::Archy::requestId;
 
     # how to update elements of @_ that have changes?
     # three implementations below. Pick one.
@@ -893,14 +892,22 @@ sub process_request_CODE {
 
 sub process_request_OVERLOAD {
     my ($self,$x,$op,$args,$context) = @_;
-    if ($op eq '@{}') { 
-	return \@$x;
+    if ($op eq '@{}') {
+	my $z = eval { \@$x };
+	$@ &&= "Not an ARRAY reference";
+	return $z;
     } elsif ($op eq '%{}') {
-	return \%$x;
+	my $z = eval { \%$x };
+	$@ &&= "Not a HASH reference";
+	return $z;
     } elsif ($op eq '&{}') {
-	return \&$x;
+	my $z = eval { \&$x };
+	$@ &&= "Not a CODE reference";
+	return $z;
     } elsif ($op eq '${}') {
-	return \$$x;
+	my $z = eval { \$$x };
+	$@ &&= "Not a SCALAR reference";
+	return $z;
     } # elsif ($op eq '*{}') { return \*$x; }
     my ($y,$swap) = @$args;
     if ($swap) {

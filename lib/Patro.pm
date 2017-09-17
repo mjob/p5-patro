@@ -8,8 +8,9 @@ use Data::Dumper;
 use Socket ();
 use Carp;
 use base 'Exporter';
-our @EXPORT = qw(patronize getProxies);
+no overloading '%{}', '${}';
 
+our @EXPORT = qw(patronize getProxies);
 our $VERSION = '0.15';
 
 BEGIN { *CORE::GLOBAL::ref = \&Patro::ref };
@@ -73,7 +74,7 @@ sub ref (_) {
 	return $ref;
     }
     my $handle = Patro::LeumJelly::handle($obj);
-    return _fetch($handle, "ref");
+    return $handle->{ref};
 }
 
 sub reftype {
@@ -82,7 +83,7 @@ sub reftype {
 	return Scalar::Util::reftype($_[0]);
     }
     my $handle = Patro::LeumJelly::handle($_[0]);
-    return _fetch($handle, "reftype");
+    return $handle->{reftype};
 }
 
 sub _allrefs {
@@ -94,27 +95,7 @@ sub client {
     if (!Patro::LeumJelly::isProxyRef(CORE::ref($_[0]))) {
 	return;     # not a remote proxy object
     }
-    return _fetch(Patro::LeumJelly::handle($_[0]),"client");
-}
-
-sub _fetch {
-    # _fetch HASH, LIST
-    #     where HASH is an object that overloads the '%{}' 
-    #     operator, temporarily unbless it, fetch values for
-    #     one or more keys, and restore the original blessing.
-    #     Returns the retrieved values.
-    
-    my ($hash, @keys) = @_;
-    my $ref = CORE::ref($hash);
-    my @r;
-    if (!$ref) {
-	@r = @{$hash}{@keys};
-    } else {
-	bless $hash, '###';
-	@r = @{$hash}{@keys};
-	bless $hash, $ref;
-    }
-    return wantarray ? @r : @r > 0 ? $r[-1] : undef;
+    return Patro::LeumJelly::handle($_[0])->{client};
 }
 
 sub main::xdiag {
