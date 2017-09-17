@@ -128,6 +128,7 @@ $make_shared = sub {
     if ($ref_type eq 'ARRAY') {
 	$copy = &threads::shared::share( [] );
 	$cloned->{$addr} = $copy;
+	no overload '@{}';
 	push @$copy, map { $make_shared->($_,$cloned) } @$item;
     } elsif ($ref_type eq 'HASH') {
 	no overloading;
