@@ -36,7 +36,7 @@ my $f = readdir $p9;
 ok($f =~ /[.tm]$/,
    'read file name from proxy dirhandle');
 my $t = telldir $p9;
-ok($t != 0, 'telldir from proxy dirhandle nonzero after 1 read')
+ok($t != 0, 'telldir from proxy dirhandle nonzero after 1 read');
 my @f = readdir $p9;
 ok(@f > 5, 'readdir from proxy dirhandle in list context');
 my @c = grep { !/t$/ } $f, @f;
