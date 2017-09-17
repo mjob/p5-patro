@@ -33,10 +33,10 @@ ok($p9 && CORE::ref($p9) eq 'Patro::N5' && Patro::ref($p9) eq 'GLOB',
 }
 
 my $f = readdir $p9;
-ok($f eq '.' || $f eq '..' || $f =~ /[tm]$/,
+ok($f =~ /[.tm]$/,
    'read file name from proxy dirhandle');
 my $t = telldir $p9;
-ok($t > 0, 'telldir from proxy dirhandle nonzero after 1 read');
+ok($t != 0, 'telldir from proxy dirhandle nonzero after 1 read')
 my @f = readdir $p9;
 ok(@f > 5, 'readdir from proxy dirhandle in list context');
 my @c = grep { !/t$/ } $f, @f;
