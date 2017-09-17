@@ -100,6 +100,7 @@ sub _share (\[$@%]) {
     } elsif (ref($_[0]) eq 'GLOB' && $share_glob) {
 	return $_[0] = threadsx::shared::glob->new( $_[0] );
     } elsif (ref($_[0]) eq 'REF') {
+	no overloading '${}';
 	if (ref(${$_[0]}) eq 'CODE' && $share_code) {
 	    return $_[0] = threadsx::shared::code->new( ${$_[0]} );
 	} elsif (ref(${$_[0]}) eq 'GLOB' && $share_glob) {
@@ -128,7 +129,7 @@ $make_shared = sub {
     if ($ref_type eq 'ARRAY') {
 	$copy = &threads::shared::share( [] );
 	$cloned->{$addr} = $copy;
-	no overload '@{}';
+	no overloading '@{}';
 	push @$copy, map { $make_shared->($_,$cloned) } @$item;
     } elsif ($ref_type eq 'HASH') {
 	no overloading;
@@ -140,10 +141,12 @@ $make_shared = sub {
 	    $copy->{$k} = $make_shared->($v,$cloned);
 	}
     } elsif ($ref_type eq 'SCALAR') {
+	no overloading '${}';
 	$copy = \do{ my $scalar = $$item };
 	threads::shared::share($copy);
 	$cloned->{$addr} = $copy;
     } elsif ($ref_type eq 'REF') {
+	no overloading '${}';
 	if ($addr == refaddr($$item)) {
 	    $copy = \$copy;
 	    threads::shared::share($copy);
@@ -176,6 +179,7 @@ $make_shared = sub {
 
     # Clone READONLY flag
     if ($ref_type eq 'SCALAR') {
+	no overloading '${}';
         if (Internals::SvREADONLY($$item)) {
             Internals::SvREADONLY($$copy, 1) if ($] >= 5.008003);
         }
@@ -205,6 +209,7 @@ sub new {
     threads::shared::shared_clone(CORE::bless \$id, $pkg);
 }
 sub code {
+    no overloading '${}';
     return $CODE_LOOKUP{${$_[0]}} || 
 	sub { croak "threadsx::shared::code: bad ",__PACKAGE__," id ${$_[0]}" };
 }
@@ -226,7 +231,10 @@ sub new {
     $GLOB_LOOKUP{$id} //= $ref;
     threads::shared::shared_clone(CORE::bless \$id, $pkg);
 }
-sub glob { return $GLOB_LOOKUP{${$_[0]}} || *STDERR }
+sub glob {
+    no overloading '${}';
+    return $GLOB_LOOKUP{${$_[0]}} || *STDERR
+}
 
 1;
 

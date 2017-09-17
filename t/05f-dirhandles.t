@@ -46,7 +46,14 @@ my $t2 = telldir $p9;
 ok($z && $t2 == $t, 'seekdir through proxy dirhandle');
 $z = rewinddir $p9;
 ok($z, 'rewinddir through proxy dirhandle');
-ok(0 == telldir($p9), 'rewinddir makes telldir return 0');
+ SKIP: {
+     if ($^O eq 'freebsd') {
+	 skip("on some OS don't expect telldir to return 0 after rewinddir",1);
+     }
+     # on freebsd, we do not expect telldir to return 0
+     my $t3 = telldir($p9);
+     ok(0 == $t3, 'rewinddir makes telldir return 0') or diag($t3);
+}
 my $f2 = readdir $p9;
 ok($f eq $f2, 'readdir after rewinddir returns same file as first read');
 

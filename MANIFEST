@@ -35,4 +35,5 @@ t/12-ArrayObj.t
 t/13-HashObj.t
 t/20-overload.t
 t/20b-overload.t
+t/20c-overload.t
 t/21-sideeffects.t
