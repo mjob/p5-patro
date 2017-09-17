@@ -11,7 +11,7 @@ use base 'Exporter';
 no overloading '%{}', '${}';
 
 our @EXPORT = qw(patronize getProxies);
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 
 BEGIN { *CORE::GLOBAL::ref = \&Patro::ref };
 
@@ -27,6 +27,7 @@ sub import {
 
 	    # a poor man's Data::Dumper, but works for Patro::N objects.
 	    *xjoin = sub {
+		no overloading '@{}','%{}';
 		join(",", map { my $r = $_;
 				my $rt = Patro::reftype($_) || "";
 				$rt eq 'ARRAY' ? "[" . xjoin(@$r) . "]" :
@@ -182,7 +183,7 @@ Patro - proxy access to remote objects
 
 =head1 VERSION
 
-0.15
+0.16
 
 
 =head1 SYNOPSIS

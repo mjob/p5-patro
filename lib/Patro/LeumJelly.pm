@@ -7,7 +7,7 @@ use Storable;
 use MIME::Base64 ();
 no overloading '%{}', '${}';
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 
 my %proxyClasses = (
     'Patro::N1' => 0,    # HASH
