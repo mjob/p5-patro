@@ -18,7 +18,7 @@ use overload
     },
     'nomethod' => \&Patro::LeumJelly::overload_handler,
     '@{}' => sub { Patro::LeumJelly::deref_handler(@_,'@{}') },
-    '%{}' => sub { Patro::LeumJelly::deref_handler(@_,'%{}') }
+    '%{}' => sub { Patro::LeumJelly::deref_handler(@_,'%{}') },
     ;
 
 # override UNIVERSAL methods
@@ -32,6 +32,7 @@ foreach my $umethod (keys %UNIVERSAL::) {
 	    return &$umethod($proxy,@_);
 	}
 	my $context = defined(wantarray) ? 1 + wantarray : 0;
+	no overloading '%{}';
 	return Patro::LeumJelly::proxy_request( $proxy,
 	    { id => $proxy->{id}, topic => 'METHOD', command => $umethod,
 	      has_args => @_ > 0, args => [ @_ ], context => $context }, @_ );
@@ -47,6 +48,7 @@ sub AUTOLOAD {
     my $args = [ @_ ];
 
     my $context = defined(wantarray) ? 1 + wantarray : 0;
+    no overloading '%{}';
 
     return Patro::LeumJelly::proxy_request( $self, 
 	{ id => $self->{id},
@@ -83,6 +85,7 @@ sub DESTROY {
 
 sub Patro::Tie::SCALAR::TIESCALAR {
     my ($pkg,$proxy) = @_;
+    no overloading '%{}';
     return bless { obj => $proxy, id => $proxy->{id} }, $pkg;
 }
 

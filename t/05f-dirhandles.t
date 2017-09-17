@@ -39,8 +39,9 @@ my $t = telldir $p9;
 ok($t > 0, 'telldir from proxy dirhandle nonzero after 1 read');
 my @f = readdir $p9;
 ok(@f > 5, 'readdir from proxy dirhandle in list context');
-my $c = grep { !/t$/ } $f, @f;
-ok($c == 3, '3 files found through proxy dirhandle that don\'t end in t');
+my @c = grep { !/t$/ } $f, @f;
+ok(@c == 3, '3 files found through proxy dirhandle that don\'t end in t')
+    or diag "Found ",0+@c," extra files in t/: @c";
 my $z = seekdir $p9, $t;
 my $t2 = telldir $p9;
 ok($z && $t2 == $t, 'seekdir through proxy dirhandle');
