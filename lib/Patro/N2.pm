@@ -8,9 +8,17 @@ use warnings;
 use Carp ();
 
 use overload
-    '${}' => sub { $_[0]->{scalar} },
+    '${}' => sub {
+	no overloading '%{}', '${}';
+	if ($_[0]->{overloads}{'${}'}) {
+	    Patro::LeumJelly::deref_handler(@_,'${}');
+	} else {
+	    $_[0]->{scalar}
+	}
+    },
     'nomethod' => \&Patro::LeumJelly::overload_handler,
-    '@{}' => \&Patro::LeumJelly::array_deref_handler,
+    '@{}' => sub { Patro::LeumJelly::deref_handler(@_,'@{}') },
+    '%{}' => sub { Patro::LeumJelly::deref_handler(@_,'%{}') }
     ;
 
 # override UNIVERSAL methods
@@ -52,6 +60,7 @@ sub AUTOLOAD {
 
 sub DESTROY {
     my $self = shift;
+    no overloading '%{}';
     return if $self->{_DESTROY}++;
     my $socket = $self->{socket};
     if ($socket) {
