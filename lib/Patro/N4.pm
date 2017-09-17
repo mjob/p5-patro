@@ -8,8 +8,17 @@ use warnings;
 use Carp ();
 
 use overload
-    '@{}' => sub { ${$_[0]}->{array} },
+    '@{}' => sub {
+	no overloading;
+	if (${$_[0]}->{overloads}{'@{}'}) {
+	    Patro::LeumJelly::deref_handler(@_,'@{}')
+	} else {
+	    ${$_[0]}->{array}
+	}
+    },
     'nomethod' => \&Patro::LeumJelly::overload_handler,
+    '%{}' => sub { Patro::LeumJelly::deref_handler(@_,'%{}') },
+    '${}' => sub { Patro::LeumJelly::deref_handler(@_,'${}') },
     ;
 
 # override UNIVERSAL methods
@@ -22,6 +31,7 @@ foreach my $umethod (keys %UNIVERSAL::) {
 		UNIVERSAL;
 	    return &$umethod($proxy,@_);
 	}
+	no overloading;
 	my $context = defined(wantarray) ? 1 + wantarray : 0;
 	return Patro::LeumJelly::proxy_request( $$proxy,
 	    { id => $$proxy->{id}, topic => 'METHOD', command => $umethod,
@@ -38,7 +48,7 @@ sub AUTOLOAD {
     my $args = [ @_ ];
 
     my $context = defined(wantarray) ? 1 + wantarray : 0;
-
+    no overloading;
     return Patro::LeumJelly::proxy_request( $$self, 
 	{ id => $$self->{id},
 	  topic => 'METHOD',
@@ -51,6 +61,7 @@ sub AUTOLOAD {
 
 sub DESTROY {
     my $self = shift;
+    no overloading;
     if ($$self->{_DESTROY}++) {
 	return;
     }

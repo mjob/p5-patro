@@ -130,9 +130,11 @@ $make_shared = sub {
 	$cloned->{$addr} = $copy;
 	push @$copy, map { $make_shared->($_,$cloned) } @$item;
     } elsif ($ref_type eq 'HASH') {
+	no overloading;
 	my $ccc = {};
 	$copy = &threads::shared::share( $ccc );
 	$cloned->{$addr} = $copy;
+
 	while (my ($k,$v) = each %$item) {
 	    $copy->{$k} = $make_shared->($v,$cloned);
 	}

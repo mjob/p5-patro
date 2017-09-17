@@ -893,14 +893,36 @@ sub process_request_CODE {
 
 sub process_request_OVERLOAD {
     my ($self,$x,$op,$args,$context) = @_;
-    if ($op eq '@{}') { 
-	return \@$x;
+#    if ($op =~ /\{\}/) {
+#	::xdiag("Archy: OVERLOAD $op for ",CORE::ref($x));
+#    }
+    if ($op eq '@{}') {
+
+#	::xdiag("overload \@{} on ",reftype($x),"-type object ",ref($x));
+#	if (overload::Method($x,$op)) {
+#	    ::xdiag(ref($x)," \$x does overload '\@{}'");
+#	} else {
+#	    ::xdiag(ref($x)," \$x does NOT overload '\@{}'");
+#	}
+	
+	my $z = eval { \@$x };
+	$@ &&= Carp::cluck("\n\n$@\n\nwhile deref ARRAY")
+	    && "Not an ARRAY reference";
+	return $z;
     } elsif ($op eq '%{}') {
-	return \%$x;
+	my $z = eval { \%$x };
+	$@ && Carp::cluck($@, " \$x is ", ref($x), "\n",
+			  do {no overloading; "$x" });
+	$@ &&= "Not a HASH reference";
+	return $z;
     } elsif ($op eq '&{}') {
-	return \&$x;
+	my $z = eval { \&$x };
+	$@ &&= "Not a CODE reference";
+	return $z;
     } elsif ($op eq '${}') {
-	return \$$x;
+	my $z = eval { \$$x };
+	$@ &&= "Not a SCALAR reference";
+	return $z;
     } # elsif ($op eq '*{}') { return \*$x; }
     my ($y,$swap) = @$args;
     if ($swap) {
