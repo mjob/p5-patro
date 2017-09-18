@@ -32,11 +32,20 @@ our $FILES_TO_CLEAN
 
 our @TEST_FILES = ('t/*.t');
 
+unlink 't/PatroNetworkOK.pm';
+open my $fh, '>', 't/PatroNetworkOK.pm';
+print $fh "# see 'can_socket()' in Makefile.PL\n";
+print $fh "0;\n";
+close $fh;
 if (eval { can_socket(); 1 }) {
     print STDERR "Network check ok. Will conduct network Patro tests\n";
     open my $fh, '>', 't/PatroNetworkOK.pm';
+    print $fh "# 'can_socket()' test passed in Makefile.PL\n";
     print $fh "1;\n";
     close $fh;
+} elsif ($ENV{AUTOMATED_TESTING}) {
+    die "Network check failed (see can_socket() in Makefile.PL.\n"
+	. "Bailing out under automated testing.";
 }
 
 ######################################################################

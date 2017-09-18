@@ -24,6 +24,9 @@ ok($p9 && CORE::ref($p9) eq 'Patro::N5' && Patro::ref($p9) eq 'GLOB',
      if ($] < 5.012) {
 	 skip("-X on proxy dirhandle requires Perl v5.12", 3);
      }
+     if ($^O eq 'MSWin32') {
+	 skip("The dirfd function is unimplemented", 3);
+     }
      my $z = -r $p9;
      ok($z, '-r op on proxy dirhandle ok');
      my $s = -s $p9;
@@ -72,7 +75,12 @@ $z = closedir $p9;
 
 $z = opendir $p9, 't';
 ok($z, 'opendir on proxy filehandle');
-$z= chdir $p9;
-ok($z, 'chdir on proxy dirhandle');
+ SKIP: {
+     if ($^O eq 'MSWin32') {
+	 skip("The fchdir function is unimplemented", 1);
+     }
+     $z = chdir $p9;
+     ok($z, 'chdir on proxy dirhandle');
+}
 
 done_testing;
