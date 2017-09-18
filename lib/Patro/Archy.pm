@@ -844,6 +844,11 @@ sub process_request_HANDLE {
 	}
     } elsif ($command eq '-X') {
 	my $key = $args->[0];
+	# insecure unless $key is vetted
+	if (length($key) != 1 || $key !~ /[A-Za-z]/) {
+	    $@ = "Invalid filetest operator '-$key'";
+	    return;
+	}
 	return eval "-$key \$fh";
     } elsif ($command eq 'SYSOPEN') {
 	if ($Patro::SECURE) {
@@ -927,10 +932,16 @@ sub process_request_OVERLOAD {
         $op =~ s/\.//;
     }
     if ($op eq '-X') {
+	# !!! insecure unless $y is vetted
+	if (length($y) != 1 || $y !~ /[A-Za-z]/) {
+	    $@ = "Invalid filetest operator '$y'";
+	    return;
+	}
         $z = eval "-$y \$x";
     } elsif ($op eq 'neg') {
         $z = eval { -$x };
     } elsif ($op eq '!' || $op eq '~' || $op eq '++' || $op eq '--') {
+	# string eval ok -- $op is vetted
         $z = eval "$op\$x";
     } elsif ($op eq 'qr') {
         $z = eval { qr/$x/ };
@@ -938,6 +949,7 @@ sub process_request_OVERLOAD {
         $z = eval { atan2($x,$y) };
     } elsif ($op eq 'cos' || $op eq 'sin' || $op eq 'exp' || $op eq 'abs' ||
              $op eq 'int' || $op eq 'sqrt' || $op eq 'log') {
+	# string eval ok -- $op is vetted
         $z = eval "$op(\$x)";
     } elsif ($op eq 'bool') {
         $z = eval { $x ? 1 : 0 };  # this isn't right
@@ -949,6 +961,15 @@ sub process_request_OVERLOAD {
         # always scalar context readline
         $z = eval { readline($x) };
     } else {  # binary operator
+	# !!! insecure unless $op is vetted
+	if (!@oplist) {
+	    @oplist = split ' ',join(' ',values %overload::ops);
+	}
+	my %ops = map {; $_ => 1 } @oplist;
+	if (!defined $ops{$op}) {
+	    $@ = "Invalid operator '$op'";
+	    return;
+	}
         $z = eval "\$x $op \$y";
     }
     if ($@) {
