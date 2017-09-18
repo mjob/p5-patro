@@ -52,7 +52,7 @@ ok(@c == 3, '3 files found through proxy dirhandle that don\'t end in t')
     or diag "Found ",0+@c," extra files in t/: @c";
 my $z = seekdir $p9, $t;
 my $t2 = telldir $p9;
-SKIP {
+SKIP: {
     if ($^O eq 'freebsd') {
 	skip("on some OS don't expect telldir to be consistent", 1);
     }
