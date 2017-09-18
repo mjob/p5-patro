@@ -112,7 +112,7 @@ sub new {
     }, __PACKAGE__;
     $self->{config} = $self->config;
     $self->start_server;
-    eval { push @SERVERS, $self };
+    push @SERVERS, threadsx::shared::_shared_clone($self);
     warn $@ if $@;
     if (@SERVERS == 1) {
 	eval q~END {
@@ -355,10 +355,17 @@ sub watch_for_finishers {
 	if (@joinable) {
 	    foreach my $subthread  (@joinable) {
 		my ($i) = grep {
-		    $self->{meta}{subthreads}{$_} == $subthread 
+		    my $is = eval {$self->{meta}{subthreads}{$_} == $subthread};
+		    if ($@) {
+			::xdiag("Archy: exception checking for finishers: ",
+				$@,"\n",$self->{meta},$self->{meta}{subthreads});
+		    }
+		    $is;
 		} 0 .. $n-1;
 		if (!defined($i)) {
-		    warn "subthread $subthread not found on this server!";
+		    # this is not unusual if the Patro user is using threads
+#		    warn "subthread $subthread ",0+$subthread,
+#			" not found on this server!";
 		    next;
 		}
 		$self->{meta}{subthreads}[$i]->join;
@@ -565,7 +572,8 @@ sub process_request_HASH {
 	$obj->{$key} = threads::shared::shared_clone($val);
 	return $old_val;
     } elsif ($cmd eq 'FETCH') {
-	return $obj->{$args->[0]};
+	my $key = $args->[0];
+	return $obj->{$key};
     } elsif ($cmd eq 'DELETE') {
 	return delete $obj->{$args->[0]};
     } elsif ($cmd eq 'EXISTS') {
@@ -1005,15 +1013,15 @@ sub serialize_response {
     my ($self, $resp) = @_;
     if ($resp->{context}) {
 	if ($resp->{context} == 1) {
-	    $resp->{response} = patrol($self,$resp,$resp->{response});
+	    $resp->{response} = patrofy($self,$resp,$resp->{response});
 	} elsif ($resp->{context} == 2) {
 	    $resp->{response} = [
-		map patrol($self,$resp,$_), @{$resp->{response}} ];
+		map patrofy($self,$resp,$_), @{$resp->{response}} ];
 	}
     }
 
     if ($resp->{out}) {
-	$resp->{out} = [ map patrol($self,$resp,$_), @{$resp->{out}} ];
+	$resp->{out} = [ map patrofy($self,$resp,$_), @{$resp->{out}} ];
     }
 
     sxdiag("Patro::Archy: final response before serialization: ",$resp);
@@ -1024,18 +1032,18 @@ sub serialize_response {
 # we should not send any serialized references back to the client.
 # replace any references in the response with an
 # object id.
-sub patrol {
+sub patrofy {
     my ($self,$resp,$obj) = @_;
-    sxdiag("patrol: called on: ",defined($obj) ? "$obj" : "<undef>");
+    sxdiag("patrofy: called on: ",defined($obj) ? "$obj" : "<undef>");
     return $obj unless ref($obj);
 
     if ($threads_avail) {
 	if (CORE::ref($obj) eq 'CODE') {
 	    $obj = threadsx::shared::code->new($obj);
-	    sxdiag("patrol: coderef converted");
+	    sxdiag("patrofy: coderef converted");
 	} elsif (CORE::ref($obj) eq 'GLOB') {
 	    $obj = threadsx::shared::glob->new($obj);
-	    sxdiag("patrol: glob converted");
+	    sxdiag("patrofy: glob converted");
 	}
     }
 
@@ -1057,7 +1065,7 @@ sub patrol {
 	} else {
 	    $reftype = Scalar::Util::reftype($obj);
 	}
-	sxdiag("patrol: ref types for $id are $ref,$reftype");
+	sxdiag("patrofy: ref types for $id are $ref,$reftype");
 	$resp->{meta}{$id} = {
 	    id => $id, ref => $ref, reftype => $reftype
 	};

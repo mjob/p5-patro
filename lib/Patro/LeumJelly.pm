@@ -230,23 +230,23 @@ sub deserialize_response {
 
     if ($response->{context}) {
 	if ($response->{context} == 1) {
-	    $response->{response} = depatrol($client,
+	    $response->{response} = unpatrofy($client,
 					     $response->{response},
 					     $response->{meta})
 	} elsif ($response->{context} == 2) {
-	    $response->{response} = [ map depatrol($client,
+	    $response->{response} = [ map unpatrofy($client,
 						   $_, $response->{meta}),
 				      @{$response->{response}} ];
 	}
     }
     if ($response->{out}) {
-	$response->{out} = [ map depatrol($client,$_,$response->{meta}),
+	$response->{out} = [ map unpatrofy($client,$_,$response->{meta}),
 			     @{$response->{out}} ];
     }
     return $response;
 }
 
-sub depatrol {
+sub unpatrofy {
     my ($client, $obj, $meta) = @_;
     if (CORE::ref($obj) ne '.Patrobras') {
 	return $obj;
@@ -257,7 +257,7 @@ sub depatrol {
     } elsif (defined $client->{proxies}{$id}) {
 	return $client->{proxies}{$id};
     }
-    warn "depatrol: reference $id $obj is not referred to in meta";
+    warn "unpatrofy: reference $id $obj is not referred to in meta";
     bless $obj, 'SCALAR';
     return $obj;
 }

@@ -27,7 +27,6 @@ sub import {
 
 	    # a poor man's Data::Dumper, but works for Patro::N objects.
 	    *xjoin = sub {
-		no overloading '@{}','%{}';
 		join(",", map { my $r = $_;
 				my $rt = Patro::reftype($_) || "";
 				$rt eq 'ARRAY' ? "[" . xjoin(@$r) . "]" :
