@@ -1,7 +1,6 @@
 # MANIFEST for p5-patro
 Changes
 lib/Patro.pm
-lib/Patro/Archy.pm
 lib/Patro/LeumJelly.pm
 lib/Patro/Mony.pm
 lib/Patro/N1.pm
@@ -10,6 +9,7 @@ lib/Patro/N3.pm
 lib/Patro/N4.pm
 lib/Patro/N5.pm
 lib/Patro/N6.pm
+lib/Patro/Server.pm
 lib/threadsx/shared.pm
 LICENSE
 Makefile.PL

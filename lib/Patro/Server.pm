@@ -1,4 +1,4 @@
-package Patro::Archy;
+package Patro::Server;
 use strict;
 use warnings;
 use Carp;
@@ -56,10 +56,10 @@ sub new {
 
 	keep_alive => $OPTS{keep_alive},
 	idle_timeout => $OPTS{idle_timeout},
-	version => $Patro::Archy::VERSION,
+	version => $Patro::Server::VERSION,
     };
 
-    $Patro::SERVER_VERSION = $Patro::Archy::VERSION;
+    $Patro::SERVER_VERSION = $Patro::Server::VERSION;
 
     my $obj = {};
     my @store;
@@ -116,7 +116,7 @@ sub new {
     warn $@ if $@;
     if (@SERVERS == 1) {
 	eval q~END {
-            if ($Patro::Archy::threads_avail) {
+            if ($Patro::Server::threads_avail) {
                 $_->detach for threads->list(threads::running);
 	    }
 	}~;
@@ -214,7 +214,7 @@ sub config {
 	port => $self->{meta}{port},
 	store => $self->{store},
 	style => $self->{meta}{style},
-	version => $Patro::Archy::VERSION
+	version => $Patro::Server::VERSION
     };
     return bless $config_data, 'Patro::Config';
 }
@@ -357,7 +357,7 @@ sub watch_for_finishers {
 		my ($i) = grep {
 		    my $is = eval {$self->{meta}{subthreads}{$_} == $subthread};
 		    if ($@) {
-			::xdiag("Archy: exception checking for finishers: ",
+			::xdiag("Server: exception checking for finishers: ",
 				$@,"\n",$self->{meta},$self->{meta}{subthreads});
 		    }
 		    $is;
@@ -401,7 +401,7 @@ sub still_active {
 sub request_response_loop {
     my ($self, $client) = @_;
 
-    local $Patro::Archy::disconnect = 0;
+    local $Patro::Server::disconnect = 0;
     my $fh0 = select $client;
     $| = 1;
     select $fh0;
@@ -414,7 +414,7 @@ sub request_response_loop {
 	$resp = $self->serialize_response($resp);
 	sxdiag("server: serialized response to request is ",$resp);
 	print {$client} $resp,"\n";
-	last if $Patro::Archy::disconnect;
+	last if $Patro::Server::disconnect;
     }
     close $client;
     return;
@@ -534,7 +534,7 @@ sub process_request {
 sub process_request_META {
     my ($self,$id,$cmd,$ctx,$has_args,$args) = @_;
     if ($cmd eq 'disconnect') {
-	$Patro::Archy::disconnect = 1;
+	$Patro::Server::disconnect = 1;
 	return bless { disconnect_ok => 1 }, '.Patroclus';
     }
     my $obj = $self->{obj}{$id};
@@ -546,7 +546,7 @@ sub process_request_META {
 	delete $self->{obj}{$id};
 	my @ids = keys %{$self->{obj}};
 	if (@ids == 0) {
-	    $Patro::Archy::disconnect = 1;
+	    $Patro::Server::disconnect = 1;
 	    return bless { disconnect_ok => 1 }, '.Patroclus';
 	} else {
 	    return bless { disconnect_ok => 0,
@@ -1045,7 +1045,7 @@ sub serialize_response {
 	$resp->{out} = [ map patrofy($self,$resp,$_), @{$resp->{out}} ];
     }
 
-    sxdiag("Patro::Archy: final response before serialization: ",$resp);
+    sxdiag("Patro::Server: final response before serialization: ",$resp);
     $resp = Patro::LeumJelly::serialize($resp);
     return $resp;
 }
@@ -1121,7 +1121,7 @@ sub TEST_MODE {
 
 =head1 NAME
 
-Patro::Archy - remote object server for Patro
+Patro::Server - remote object server for Patro
 
 =head1 VERSION
 
