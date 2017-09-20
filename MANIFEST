@@ -1,6 +1,7 @@
 # MANIFEST for p5-patro
 Changes
 lib/Patro.pm
+lib/Patro/Archy.pm
 lib/Patro/LeumJelly.pm
 lib/Patro/Mony.pm
 lib/Patro/N1.pm
@@ -37,3 +38,4 @@ t/20a-overload.t
 t/20b-overload.t
 t/20c-overload.t
 t/21-sideeffects.t
+t/30-patroarchy.t
