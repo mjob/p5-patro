@@ -138,16 +138,12 @@ sub proxy_request {
 	# if there are any Patro'N items in $request->{args},
 	# we should convert it to ... what?
 	foreach my $arg (@{$request->{args}}) {
-	    if (isProxyRef(ref($arg))) {
+	    if (isProxyRef(CORE::ref($arg))) {
 		my $id = handle($arg)->{id};
 		$arg = bless \$id, '.Patroon';
 	    }
 	}
     }
-
-#    if ($request->{command} eq '@{}') {
-#	::xdiag("in LeumJelly::proxy_request , request=",$request);
-#    }
 
     my $sreq = serialize($request);
     my $resp;

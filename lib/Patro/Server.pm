@@ -8,6 +8,7 @@ use Scalar::Util 'reftype';
 use POSIX ':sys_wait_h';
 require overload;
 
+our $archy_avail = eval "use Patro::Archy;1";
 our $threads_avail;
 *sxdiag = sub {};
 if ($ENV{PATRO_SERVER_DEBUG}) {
@@ -16,11 +17,10 @@ if ($ENV{PATRO_SERVER_DEBUG}) {
 }
 our $VERSION = '0.16';
 our @SERVERS :shared;
-our %OPTS = ( # XXX - needs documentation
-    keep_alive => 30,
-    idle_timeout => 30,
-    fincheck_freq => 5,
-);
+our %OPTS;
+$OPTS{keep_alive} //= 30;
+$OPTS{idle_timeout} //= 30;
+$OPTS{fincheck_freq} //= 5;
 
 sub new {
     my $pkg = shift;
@@ -296,12 +296,20 @@ sub accept_clients {
 
 sub start_subserver {
     my ($self,$client) = @_;
+    # monitor id is not shared across forks or threads,
+    # so each server will have a unique value
+
+    our $monitor_id;
+    $monitor_id //= 0;
+    $monitor_id = sprintf "%010X", hex($monitor_id) + 10 + 1014 * rand;
+
     if ($self->{meta}{style} eq 'forked') {
 	my $pid = CORE::fork();
 	if (!defined($pid)) {
 	    croak __PACKAGE__,": fork after accept $!";
 	}
 	if ($pid != 0) {
+	    $monitor_id = sprintf "%010X", hex($monitor_id) + 5 + 256 * rand;
 	    if ($self->{meta}{pid_file}) {
 		open my $fh, '>>', $self->{meta}{pid_file};
 		flock $fh, 2;
@@ -475,6 +483,8 @@ sub process_request {
 	@r = $self->process_request_CODE($id,undef,$ctx,$has_args,$args);
     } elsif ($topic eq 'HANDLE') {
 	@r = $self->process_request_HANDLE($id,$cmd,$ctx,$has_args,$args);
+    } elsif ($topic eq 'SYNC') {
+	@r = $self->process_request_SYNC($id,$cmd,$ctx,$has_args,$args);
     } elsif ($topic eq 'OVERLOAD') {
 	my $obj = $self->{obj}{$id};
 	@r = $self->process_request_OVERLOAD($obj,$cmd,$args,$ctx);
@@ -554,6 +564,33 @@ sub process_request_META {
 	}
     } else {
 	$@ = "Patro: unsupported meta command '$cmd'";
+	return;
+    }
+}
+
+sub process_request_SYNC {
+    my ($self,$id,$cmd,$ctx,$has_args,$args) = @_;
+    if (!$archy_avail) {
+	$! = 999;
+	$SIDES->{warn} = "Patro synchronization feature not available";
+	return;
+    }
+    my $obj = $self->{obj}{$id};
+    our $monitor_id;
+    if ($cmd eq 'lock') {
+	if ($has_args) {
+	    return Patro::Archy::plock($obj, $monitor_id, @$args);
+	} else {
+	    return Patro::Archy::plock($obj, $monitor_id);
+	}
+    } elsif ($cmd eq 'unlock') {
+	if ($has_args) {
+	    return Patro::Archy::punlock($obj, $monitor_id, $args->[0]);
+	} else {
+	    return Patro::Archy::punlock($obj, $monitor_id);
+	}
+    } else {
+	$@ = "Unrecognized SYNC command '$cmd'";
 	return;
     }
 }

@@ -28,6 +28,7 @@ use constant {
     FAIL_DEEP_RECURSION => 1111,
 };
 our $VERSION = '0.16';
+our $DEBUG;
 
 my $DIR;
 $DIR //= "/dev/shm/resources-$$";
@@ -84,6 +85,8 @@ sub plock {
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;
     flock $fh, LOCK_EX;
 
+    if ($DEBUG) { print STDERR "Archy: checking state for $DIR/$addr\@$lu\n" }
+
     # if we already have the lock, increment the lock counter and return OK
     my $ch = _readbyte($fh,$lu);
     if ($ch >= STATE_LOCK) {
@@ -92,6 +95,7 @@ sub plock {
 	    $! = FAIL_DEEP_RECURSION;
 	    return;
         }
+	if ($DEBUG) { print STDERR "Archy: already locked \@ $lu\n" }
         _writebyte($fh,$lu,$ch+1);
         close $fh;
         return 1;
@@ -101,6 +105,7 @@ sub plock {
     if (_unlocked(_readall($fh))) {
         _writebyte($fh, $lu, STATE_LOCK);
         close $fh;
+	$DEBUG && print STDERR "Archy: acquired the lock \@ $lu\n";
         return 1;
     }
     close $fh;
@@ -109,6 +114,7 @@ sub plock {
     if ($timeout < 0) {
         close $fh;
 	$! = FAIL_EXPIRED;
+	$DEBUG && print STDERR "Archy: non-blocking, lock not avail \@ $lu\n";
 	return;
     }
 
@@ -124,15 +130,18 @@ sub plock {
         open $fh, '+<', "$DIR/$addr";
         flock $fh, LOCK_EX;
         $left = $expire - time;
+	$DEBUG && print STDERR "Archy: waiting for lock \@ $lu (up to $left)\n";
 
         if (_unlocked(_readall($fh))) {
             _writebyte($fh,$lu,STATE_LOCK);
+	    $DEBUG && print STDERR "Archy: acquired lock \@ $lu after wait\n";
             return 1;
         }
         close $fh;
     }
     close $fh;
     $! = FAIL_EXPIRED;
+    $DEBUG && print STDERR "Archy: expired waiting for lock \@ $lu\n";
     return;
 }
 
@@ -147,6 +156,7 @@ sub punlock {
     flock $fh, LOCK_EX;
 
     # if we already have the lock, decrement the lock counter and return OK
+    $DEBUG && print STDERR "Archy: checking state for unlock \@ $lu\n";
     $ch = _readbyte($fh,$lu);
     if ($ch > STATE_LOCK) {
 	if ($count < 0) {
@@ -159,10 +169,12 @@ sub punlock {
 	}
         _writebyte($fh,$lu,$ch);
         close $fh;
+	$DEBUG && print STDERR "Archy: unlock successful \@ $lu. New state $ch\n";
         return 1;
     } elsif ($ch == STATE_LOCK) {
         _writebyte($fh,$lu,STATE_NULL);
         close $fh;
+	$DEBUG && print STDERR "Archy: unlock successful \@ $lu. New state NULL\n";
         return 1;
     }
     close $fh;
@@ -258,6 +270,9 @@ sub _readbyte {
     seek $fh, $n, SEEK_SET;
     my $p = read $fh, $b, 1;
     my $ch = $p ? ord($b) : 0;
+    if ($DEBUG) {
+	print STDERR "Archy:     readbyte($n) = $ch\n";
+    }
     return $ch;
 }
 
@@ -267,12 +282,20 @@ sub _writebyte {
 
     if ($n > -s $fh) {
 	# extend the file so that we can write to byte $n
+	my $newlen = $n - (-s $fh);
         seek $fh, 0, SEEK_END;
-        print $fh "\0" x ($n - -s $fh);
+        print $fh "\0" x $newlen;
+	if ($DEBUG) {
+	    print STDERR "Archy:     extend($newlen)\n";
+	}
     }
     seek $fh,0,0;
     my $z1 = seek $fh, $n, 0;
     my $z2 = print $fh chr($val);
+    if ($DEBUG) {
+	print STDERR "Archy:     writebyte($n,$val)\n";
+    }
+    $z2;
 }
 
 sub _readall {
@@ -280,6 +303,10 @@ sub _readall {
     my $buffer = '';
     seek $fh, 0, SEEK_SET;
     read $fh, $buffer, 32678;
+    if ($DEBUG) {
+	print STDERR "Archy:     readall => [",
+	    join(" ",map ord,split(//,$buffer)), "]\n";
+    }
     return $buffer;
 }
 

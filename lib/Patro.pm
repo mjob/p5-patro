@@ -114,6 +114,77 @@ sub main::xdiag {
     }
 }
 
+# proxy synchronization
+
+my %lock_states;
+
+sub synchronize ($&;$$) {
+    no overloading '%{}';
+    my ($proxy, $block, $timeout, $steal) = @_;
+    my $status = Patro::lock($proxy, $timeout, $steal);
+    my @r = eval {
+	if (wantarray) {
+	    $block->();
+	} elsif (defined wantarray) {
+	    scalar $block->();
+	} else {
+	    $block->();
+	    0;
+	}
+    };
+    my $error = $@;
+    $status = Patro::unlock($proxy);
+    if ($error) {
+	carp "Exception in synchronized block: $error";
+	return;
+    }
+    if (!$status) {
+	carp "Patro::unlock: unlock on proxy failed: $!";
+    }
+    return wantarray ? @r : @r ? $r[-1] : undef;
+}
+
+sub lock {
+    my ($proxy, $timeout, $steal) = @_;
+    my $handle = Patro::LeumJelly::handle($proxy);
+    if (!$handle) {
+	carp "Patro::lock: not a proxy";
+	return;
+    }
+    my $status = Patro::LeumJelly::proxy_request(
+	$handle,
+	{ topic => 'SYNC',
+	  command => 'lock', context => 1,
+	  id => $handle->{id},
+	  has_args => defined($timeout),
+	  args => [ $timeout, $steal ] } );
+    if (!$status) {
+	carp "Patro::lock: lock on proxy $handle->{id} was not acquired";
+	return;
+    }
+    return $status;
+}
+
+sub unlock {
+    my ($proxy, $count) = @_;
+    $count ||= 1;
+    my $handle = Patro::LeumJelly::handle($proxy);
+    if (!$handle) {
+	carp "Patro::unlock: not a proxy";
+    }
+    my $status = Patro::LeumJelly::proxy_request(
+	$handle,
+	{ topic => 'SYNC', command => 'unlock', context => 1,
+	  id => $handle->{id},
+	  has_args => 1, args => [ $count ] });
+    if (!$status) {
+	carp "Patro::unlock: unlock operation on $handle->{id} failed";
+    }
+    return $status;
+}
+
+
+
 # Patro OO-interface
 
 sub new {
