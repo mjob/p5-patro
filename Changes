@@ -2,7 +2,9 @@ Revision history for Patro
 --------------------------
 
 0.16	...
-	The next great thing to happen to Patro
+	- Address insecure string eval in overload handler
+	- Support synchronization of underlying remote objects through
+	  proxies in threaded servers
 
 0.15	2017-09-17
 	- Support proxies to objects that overload dereference operators
