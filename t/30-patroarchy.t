@@ -21,7 +21,8 @@ ok(punlock($foo, "monitor-0"), 'unlock');
 my $s0 = $STDERR;
 ok(!punlock($foo, "monitor-3"), 'unlock without possession fails');
 ok($! == FAIL_INVALID_WO_LOCK, 'errno set');
-ok($s0 eq '' && $STDERR =~ /unlock called on .* without lock/, 'warning written');
+ok($s0 eq '' && $STDERR =~ /unlock called on .* without lock/,
+   'warning written') or diag $STDERR;
 ok(plock($foo, "monitor-1"), 'lock');
 my $t = time;
 ok(!plock($foo,"monitor-2",-1), 'non-blocking lock failed');

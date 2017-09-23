@@ -31,7 +31,11 @@ our $VERSION = '0.16';
 our $DEBUG;
 
 my $DIR;
-$DIR //= "/dev/shm/resources-$$";
+$DIR //= do {
+    my $d = "/dev/shm/resources-$$";
+    my $pid = $$;
+    $d;
+};
 mkdir $DIR,0755 unless -d $DIR;
 
 my %lookup;
@@ -76,11 +80,20 @@ sub _lookup {
     return $lookup{$id};
 }
 
+
+sub _addr {
+    use B;
+    my $obj = shift;
+    my $addr = B::svref_2object($obj)->MAGIC;
+    $addr ? $addr->OBJ->RV->IV : refaddr($obj);
+}
+
 sub plock {
     my ($obj, $id, $timeout) = @_;
     my $lu = _lookup($id);
-    my $addr = refaddr($obj);
-    my $expire = $timeout > 0 ? time + $timeout : 9E19;
+    my $addr = _addr($obj);
+
+    my $expire = $timeout && $timeout > 0 ? time + $timeout : 9E19;
     my $fh;
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;
     flock $fh, LOCK_EX;
@@ -121,11 +134,7 @@ sub plock {
     # wait until timeout for the lock
     my $left = $expire - time;
     while ($left > 0) {
-        if ($left > 10) {
-            sleep 1;
-        } else {
-            sleep 0.1;
-        }
+	threads->yield;
 
         open $fh, '+<', "$DIR/$addr";
         flock $fh, LOCK_EX;
@@ -148,7 +157,7 @@ sub plock {
 sub punlock {
     my ($obj, $id, $count) = @_;
     my $lu = _lookup($id);
-    my $addr = refaddr($obj);
+    my $addr = _addr($obj);
     $count ||= 1;
 
     my $fh;
@@ -186,14 +195,13 @@ sub punlock {
 sub pwait {
     my ($obj, $id, $timeout) = @_;
     my $lu = _lookup($id);
-    my $addr = refaddr($obj);
+    my $addr = _addr($obj);
     my $expire = $timeout > 0 ? time + $timeout : 9E19;
     if (!punlock($obj,$id)) {
         return;
     }
     my $fh;
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;
-
     flock $fh, LOCK_EX;
     _writebyte($fh,$lu,STATE_WAIT);
     close $fh;
@@ -205,11 +213,7 @@ sub pwait {
 
     my $left = $expire - time;
     while ($left > 0) {
-        if ($left > 10) {
-            sleep 1;
-        } else {
-            sleep 0.1;
-        }
+	threads->yield;
 
         open $fh, '+<', "$DIR/$addr";
         flock $fh, LOCK_EX;
@@ -232,7 +236,7 @@ sub pnotify {
     my ($obj, $id, $count) = @_;
     $count ||= 1;
     my $lu = _lookup($id);
-    my $addr = refaddr($obj);
+    my $addr = _addr($obj);
 
     my $fh;
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;

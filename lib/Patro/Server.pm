@@ -9,6 +9,7 @@ use POSIX ':sys_wait_h';
 require overload;
 
 our $archy_avail = eval "use Patro::Archy;1";
+#$Patro::Archy::DEBUG = 1;
 our $threads_avail;
 *sxdiag = sub {};
 if ($ENV{PATRO_SERVER_DEBUG}) {
