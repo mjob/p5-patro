@@ -125,7 +125,7 @@ sub plock {
     close $fh;
     
     # if non-blocking, return EXPIRED
-    if ($timeout < 0) {
+    if ($timeout && $timeout < 0) {
         close $fh;
 	$! = FAIL_EXPIRED;
 	$DEBUG && print STDERR "Archy: non-blocking, lock not avail \@ $lu\n";
@@ -207,7 +207,7 @@ sub pwait {
     _writebyte($fh,$lu,STATE_WAIT);
     close $fh;
 
-    if ($timeout < 0) {  # non-blocking wait?
+    if ($timeout && $timeout < 0) {  # non-blocking wait?
 	$! = FAIL_EXPIRED;
 	return;
     }
