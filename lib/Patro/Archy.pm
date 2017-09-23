@@ -37,6 +37,7 @@ $DIR //= do {
     $d;
 };
 mkdir $DIR,0755 unless -d $DIR;
+die "Patro::Archy requires a system with /dev/shm" unless -d $DIR;
 
 my %lookup;
 
@@ -134,7 +135,7 @@ sub plock {
     # wait until timeout for the lock
     my $left = $expire - time;
     while ($left > 0) {
-	threads->yield;
+	$threads::threads ? threads->yield : sleep 1;
 
         open $fh, '+<', "$DIR/$addr";
         flock $fh, LOCK_EX;
@@ -213,7 +214,7 @@ sub pwait {
 
     my $left = $expire - time;
     while ($left > 0) {
-	threads->yield;
+	$threads::threads ? threads->yield : sleep 1;
 
         open $fh, '+<', "$DIR/$addr";
         flock $fh, LOCK_EX;

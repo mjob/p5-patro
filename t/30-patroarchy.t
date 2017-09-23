@@ -1,5 +1,5 @@
 use Test::More;
-use Patro::Archy ':all', ':errno';
+#use Patro::Archy ':all', ':errno';
 use strict;
 use warnings;
 use Time::HiRes qw(time sleep);
@@ -8,6 +8,13 @@ alarm 20;
 $SIG{ALRM} = sub {
     die "$0 test took too long. It's possible there was a deadlock";
 };
+
+if (!eval "use Patro::Archy ':all',':errno'; 1") {
+    diag "# synchronization tests require threads and Patro::Archy";
+    ok(1,"# synchronization tests require threads and Patro::Archy");
+    done_testing;
+    exit;
+}
 
 my $foo = {};
 my $bar = [];
@@ -20,7 +27,7 @@ ok(plock($foo, "monitor-0"), 'lock');
 ok(punlock($foo, "monitor-0"), 'unlock');
 my $s0 = $STDERR;
 ok(!punlock($foo, "monitor-3"), 'unlock without possession fails');
-ok($! == FAIL_INVALID_WO_LOCK, 'errno set');
+ok($! == &FAIL_INVALID_WO_LOCK, 'errno set');
 ok($s0 eq '' && $STDERR =~ /unlock called on .* without lock/,
    'warning written') or diag $STDERR;
 ok(plock($foo, "monitor-1"), 'lock');
@@ -32,7 +39,7 @@ $t = time;
 my $s1 = $STDERR;
 ok(!plock($foo,"monitor-2",2.5), 'timed lock failed');
 my $s2 = $STDERR;
-is(0+$!, FAIL_EXPIRED, '... errno set');
+is(0+$!, &FAIL_EXPIRED, '... errno set');
 ok($s1 eq $s2, '... without warning');
 ok(time - $t > 1.5, 'timed lock took time');
 ok(punlock($foo,"monitor-1"), 'released resource');
@@ -46,7 +53,7 @@ ok(plock($bar, "monitor-4"), 'stacked lock');
 ok(punlock($bar, "monitor-4"), '1st unlock');
 $s1 = $STDERR;
 ok(!plock($bar, "monitor-5", -1), 'lock not available for new monitor');
-is(0+$!, FAIL_EXPIRED, 'errno set');
+is(0+$!, &FAIL_EXPIRED, 'errno set');
 ok($s1 eq $STDERR, '... without additional warning');
 ok(punlock($bar, "monitor-4"), '2nd unlock');
 ok(plock($bar, "monitor-5", -1), 'lock available after 2nd unlock');
@@ -72,10 +79,10 @@ sleep 1;
 my $v;
 $! = 0;
 ok(!pwait($bar, "parent-5"),"wait fails without lock");
-ok($! == FAIL_INVALID_WO_LOCK, 'errno set');
+ok($! == &FAIL_INVALID_WO_LOCK, 'errno set');
 $! = 0;
 ok(!pnotify($bar, "parent-5"),"notify fails without lock");
-ok($! == FAIL_INVALID_WO_LOCK, 'errno set');
+ok($! == &FAIL_INVALID_WO_LOCK, 'errno set');
 
 $t = time;
 
