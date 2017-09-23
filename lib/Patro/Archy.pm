@@ -171,22 +171,35 @@ sub punlock {
     $ch = _readbyte($fh,$lu);
     if ($ch > STATE_LOCK) {
 	if ($count < 0) {
+	    $count = $ch - STATE_LOCK + 1;
 	    $ch = 0;
 	} else {
-	    $ch -= $count;
+	    if ($count > $ch - STATE_LOCK + 1) {
+		carp "punlock: count ($count) exceeded lock count (",
+		    $ch - STATE_LOCK + 1, ")";
+		$count = $ch - STATE_LOCK + 1;
+		$ch = STATE_NULL;
+	    } else {
+		$ch -= $count;
+	    }
 	}
 	if ($ch < STATE_LOCK) {
 	    $ch = STATE_NULL;
 	}
         _writebyte($fh,$lu,$ch);
         close $fh;
-	$DEBUG && print STDERR "Archy: unlock successful \@ $lu. New state $ch\n";
-	# !!! should return the number of locks removed
-        return 1;
+	$DEBUG && print STDERR
+	    "Archy: unlock successful \@ $lu. New state $ch\n";
+        return $count;
     } elsif ($ch == STATE_LOCK) {
+	if ($count > 1) {
+	    carp "punlock: count ($count) exceeded lock count (1)";
+	    $count = 1;
+	}
         _writebyte($fh,$lu,STATE_NULL);
         close $fh;
-	$DEBUG && print STDERR "Archy: unlock successful \@ $lu. New state NULL\n";
+	$DEBUG && print STDERR
+	    "Archy: unlock successful \@ $lu. New state NULL\n";
         return 1;
     }
     close $fh;
@@ -243,7 +256,6 @@ sub pwait {
 }
 
 sub pnotify {
-    # !!! should return the number of monitors notified
     my ($obj, $id, $count) = @_;
     $count ||= 1;
     my $lu = _lookup($id);
@@ -266,15 +278,16 @@ sub pnotify {
     my @y1 = (0 .. $sz-1);
     my @y = splice @y1, int($sz * rand);
     push @y, @y1;
+    my $notified = 0;
     foreach my $y (@y) {
         $ch = _readbyte($fh,$y);
         if ($ch == STATE_WAIT) {
             _writebyte($fh,$y,STATE_NOTIFY);
-	    last if --$count <= 0;
+	    last if ++$notified >= $count && $count > 0;
         }
     }
     close $fh;
-    return 1;
+    return $notified || "0 but true";
 }
 
 

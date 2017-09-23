@@ -24,8 +24,8 @@ open STDERR, '+>', \$STDERR;
 (*STDERR)->autoflush(1);
 
 ok(plock($foo, "monitor-0"), 'lock');
-ok(punlock($foo, "monitor-0"), 'unlock');
-my $s0 = $STDERR;
+ok(1 == punlock($foo, "monitor-0"), 'unlock');
+my $s0 = $STDERR // '';
 ok(!punlock($foo, "monitor-3"), 'unlock without possession fails');
 ok($! == &FAIL_INVALID_WO_LOCK, 'errno set');
 ok($s0 eq '' && $STDERR =~ /unlock called on .* without lock/,
@@ -42,20 +42,22 @@ my $s2 = $STDERR;
 is(0+$!, &FAIL_EXPIRED, '... errno set');
 ok($s1 eq $s2, '... without warning');
 ok(time - $t > 1.5, 'timed lock took time');
-ok(punlock($foo,"monitor-1"), 'released resource');
+ok(1 == punlock($foo,"monitor-1"), 'released resource');
 ok(plock($foo,"monitor-2",-1), 'lock immediately accessible by new monitor');
-ok(punlock($foo,"monitor-2"), 'release reference from new monitor');
+ok(1 == punlock($foo,"monitor-2"), 'release reference from new monitor');
 
 # stacked lock calls
 
 ok(plock($bar, "monitor-4"), 'got lock');
 ok(plock($bar, "monitor-4"), 'stacked lock');
-ok(punlock($bar, "monitor-4"), '1st unlock');
+ok(plock($bar, "monitor-4"), 'stacked lock again');
+ok(2 == punlock($bar, "monitor-4", 2), 'unlock with count');
 $s1 = $STDERR;
 ok(!plock($bar, "monitor-5", -1), 'lock not available for new monitor');
 is(0+$!, &FAIL_EXPIRED, 'errno set');
 ok($s1 eq $STDERR, '... without additional warning');
-ok(punlock($bar, "monitor-4"), '2nd unlock');
+ok(1 == punlock($bar, "monitor-4",2), 'unlock with count too high ok');
+ok($s1 ne $STDERR, '... but generates warning') or diag $STDERR;
 ok(plock($bar, "monitor-5", -1), 'lock available after 2nd unlock');
 ok(punlock($bar, "monitor-5"), 'lock released from new monitor');
 
@@ -94,5 +96,26 @@ $t = time;
 ok(pwait($bar,"parent-5"), 'wait ok'); tdiag(9);
 ok(time - $t > 1.5, '... and wait we did');
 ok(punlock($bar,"parent-5"), 'unlock ok'); tdiag(10);
+
+for my $monitor ("child-A", "child-B", "child-C") {
+    if (fork() == 0) {
+	plock($bar, $monitor);
+	pwait($bar, $monitor);
+	punlock($bar, $monitor);
+	exit;
+    }
+}
+sleep 3;
+ok(plock($bar, "parent-6"), 'parent lock ok');
+is(3, pnotify($bar, "parent-6", -1), 'notify all');
+
+my $v = pnotify($bar, "parent-6");
+ok($v, 'starved pnotify returned true value');
+ok($v==0, 'starved pnotify returned zero value');
+
+ok(punlock($bar,"parent-6"), 'parent unlock ok');
+	  
+
+
 
 done_testing();
