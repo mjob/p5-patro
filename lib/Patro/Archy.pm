@@ -20,7 +20,8 @@ use constant {
     STATE_NULL => 0,
     STATE_WAIT => 1,
     STATE_NOTIFY => 2,
-    STATE_LOCK => 3,
+    STATE_STOLEN => 3,
+    STATE_LOCK => 4,
     STATE_LOCK_MAX => 254,
 
     FAIL_EXPIRED => 1001,
@@ -180,6 +181,7 @@ sub punlock {
         _writebyte($fh,$lu,$ch);
         close $fh;
 	$DEBUG && print STDERR "Archy: unlock successful \@ $lu. New state $ch\n";
+	# !!! should return the number of locks removed
         return 1;
     } elsif ($ch == STATE_LOCK) {
         _writebyte($fh,$lu,STATE_NULL);
@@ -198,6 +200,8 @@ sub pwait {
     my $lu = _lookup($id);
     my $addr = _addr($obj);
     my $expire = $timeout > 0 ? time + $timeout : 9E19;
+
+    # !!! pwait must remove all stacked locks
     if (!punlock($obj,$id)) {
         return;
     }
@@ -207,33 +211,39 @@ sub pwait {
     _writebyte($fh,$lu,STATE_WAIT);
     close $fh;
 
-    if ($timeout && $timeout < 0) {  # non-blocking wait?
-	$! = FAIL_EXPIRED;
-	return;
-    }
-
     my $left = $expire - time;
     while ($left > 0) {
 	$threads::threads ? threads->yield : sleep 1;
 
         open $fh, '+<', "$DIR/$addr";
         flock $fh, LOCK_EX;
-        $left = $expire - time;
         my $ch = _readbyte($fh,$lu);
         close $fh;
+        $left = $expire - time;
 
         if ($ch == STATE_NOTIFY) {    # got notify
-	    if ($left <= 0) {
-		$left = 0.01;
+	    open $fh, '+<', "$DIR/$addr";
+	    flock $fh, LOCK_EX;
+	    _writebyte($fh,$lu,STATE_NULL);
+	    close $fh;
+	    $left = $expire - time;
+	    if ($left <= 0 || ($timeout && $timeout < 0)) {
+		$left = -1;
 	    }
             return plock($obj,$id,$left);
         }
+	last if $timeout && $timeout < 0;
     }
+
+    # !!! what state should the monitor be left in when a
+    # !!! wait call times out?
+    
     $! = FAIL_EXPIRED;
     return;
 }
 
 sub pnotify {
+    # !!! should return the number of monitors notified
     my ($obj, $id, $count) = @_;
     $count ||= 1;
     my $lu = _lookup($id);

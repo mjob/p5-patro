@@ -8,6 +8,9 @@ use Scalar::Util 'reftype';
 use POSIX ':sys_wait_h';
 require overload;
 
+# TODO: more expressive "security" policy, which must now cover whether
+#       advisory locks may be stolen.
+
 our $archy_avail = eval "use Patro::Archy;1";
 #$Patro::Archy::DEBUG = 1;
 our $threads_avail;
