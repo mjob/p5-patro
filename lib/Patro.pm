@@ -1,4 +1,4 @@
-spackage Patro;
+package Patro;
 use strict;
 use warnings;
 use Patro::Mony;
