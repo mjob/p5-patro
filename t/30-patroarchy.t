@@ -4,7 +4,6 @@ use strict;
 use warnings;
 use Time::HiRes qw(time sleep);
 
-alarm 20;
 $SIG{ALRM} = sub {
     die "$0 test took too long. It's possible there was a deadlock";
 };
@@ -23,6 +22,7 @@ close STDERR;
 open STDERR, '+>', \$STDERR;
 (*STDERR)->autoflush(1);
 
+alarm 20;
 ok(plock($foo, "monitor-0"), 'lock');
 ok(1 == punlock($foo, "monitor-0"), 'unlock');
 my $s0 = $STDERR // '';
@@ -46,8 +46,9 @@ ok(1 == punlock($foo,"monitor-1"), 'released resource');
 ok(plock($foo,"monitor-2",-1), 'lock immediately accessible by new monitor');
 ok(1 == punlock($foo,"monitor-2"), 'release reference from new monitor');
 
-# stacked lock calls
 
+# stacked lock calls
+alarm 20;
 ok(plock($bar, "monitor-4"), 'got lock');
 ok(plock($bar, "monitor-4"), 'stacked lock');
 ok(plock($bar, "monitor-4"), 'stacked lock again');
@@ -62,11 +63,12 @@ ok(plock($bar, "monitor-5", -1), 'lock available after 2nd unlock');
 ok(punlock($bar, "monitor-5"), 'lock released from new monitor');
 
 
-sub tdiag { return; print STDERR "# STEP ",@_,"\n" }
+sub tdiag { return; diag "# STEP ",@_; }
 
 # simple wait/notify example
-
+alarm 20;
 if (CORE::fork() == 0) {
+#    diag "wait/notify fork $$ launch";
     my $z = plock($bar, "child-4"); tdiag("1 - $z");
     sleep 3;
     $z = pwait($bar, "child-4"); tdiag("4 - $z");
@@ -75,6 +77,7 @@ if (CORE::fork() == 0) {
     plock($bar, "child-6"); tdiag(6);
     pnotify($bar, "child-6"); tdiag(7);
     punlock($bar, "child-6"); tdiag(8);
+#    diag "wait/notify fork $$ exit";
     exit;
 }
 sleep 1;
@@ -96,12 +99,17 @@ $t = time;
 ok(pwait($bar,"parent-5"), 'wait ok'); tdiag(9);
 ok(time - $t > 1.5, '... and wait we did');
 ok(punlock($bar,"parent-5"), 'unlock ok'); tdiag(10);
+CORE::wait;
 
+# multi-notify semantics
+alarm 20;
 for my $monitor ("child-A", "child-B", "child-C") {
-    if (fork() == 0) {
+    if (CORE::fork() == 0) {
+#	diag "multinotify $monitor $$ launch";
 	plock($bar, $monitor);
 	pwait($bar, $monitor);
 	punlock($bar, $monitor);
+#	diag "multinotify $monitor $$ exit";
 	exit;
     }
 }
@@ -109,11 +117,37 @@ sleep 3;
 ok(plock($bar, "parent-6"), 'parent lock ok');
 is(3, pnotify($bar, "parent-6", -1), 'notify all');
 
-my $v = pnotify($bar, "parent-6");
+$v = pnotify($bar, "parent-6");
 ok($v, 'starved pnotify returned true value');
 ok($v==0, 'starved pnotify returned zero value');
 
 ok(punlock($bar,"parent-6"), 'parent unlock ok');
+CORE::wait for 1..3;
+
+# steal semantics
+alarm 20;
+pipe RR,WW;
+if (CORE::fork() == 0) {
+#    diag "steal fork $$ launch";
+    plock($bar, "child-E",2);
+    print WW "\n"; close WW;
+    sleep 5;
+    punlock($bar, "child-E");
+#    diag "steal fork $$ exit";
+    exit;
+}
+
+scalar <RR>; close RR;
+$t = time;
+ok(!plock($bar, "parent-E", -1), 'lock not available');
+ok(time - $t < 0.5, '... non-blocking lock');
+
+$t = time;
+ok(plock($bar, "parent-E", 3, 1), 'lock successfully acquired');
+ok(time - $t > 2.5, '... after 3 seconds, probably stole it');
+is(1, punlock($bar,"parent-E"), 'successfully unlocked');
+CORE::wait;
+
 	  
 
 

@@ -139,6 +139,7 @@ sub synchronize ($&;$$) {
 	return;
     }
     if (!$status) {
+	# does not warn if status was "0 but true"
 	carp "Patro::unlock: unlock on proxy failed: $!";
     }
     return wantarray ? @r : @r ? $r[-1] : undef;
@@ -178,6 +179,7 @@ sub unlock {
 	  id => $handle->{id},
 	  has_args => 1, args => [ $count ] });
     if (!$status) {
+	# does not warn if status was "0 but true"
 	carp "Patro::unlock: unlock operation on $handle->{id} failed";
     }
     return $status;
@@ -614,7 +616,7 @@ two key-value pairs recognized:
 
 Waits at least C<$seconds> seconds until the lock for the
 remote resource is available, and gives up after that. 
-Using a negative value for C<$seconds> has the symantics of
+Using a negative value for C<$seconds> has the semantics of
 a non-blocking lock call. If C<$seconds> is negative and
 the lock is not acquired on the first attempt, the
 C<synchronize> call does not make any further attempts.

@@ -26,6 +26,7 @@ use constant {
 
     FAIL_EXPIRED => 1001,
     FAIL_INVALID_WO_LOCK => 1002,
+    FAIL_DURING_RELOCK => 1004,
     FAIL_DEEP_RECURSION => 1111,
 };
 our $VERSION = '0.16';
@@ -91,7 +92,7 @@ sub _addr {
 }
 
 sub plock {
-    my ($obj, $id, $timeout) = @_;
+    my ($obj, $id, $timeout, $steal) = @_;
     my $lu = _lookup($id);
     my $addr = _addr($obj);
 
@@ -100,7 +101,7 @@ sub plock {
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;
     flock $fh, LOCK_EX;
 
-    if ($DEBUG) { print STDERR "Archy: checking state for $DIR/$addr\@$lu\n" }
+    $DEBUG && print STDERR "Archy: checking state for $DIR/$addr\@$lu\n";
 
     # if we already have the lock, increment the lock counter and return OK
     my $ch = _readbyte($fh,$lu);
@@ -110,7 +111,7 @@ sub plock {
 	    $! = FAIL_DEEP_RECURSION;
 	    return;
         }
-	if ($DEBUG) { print STDERR "Archy: already locked \@ $lu\n" }
+	$DEBUG && print STDERR "Archy: already locked \@ $lu\n";
         _writebyte($fh,$lu,$ch+1);
         close $fh;
         return 1;
@@ -123,15 +124,32 @@ sub plock {
 	$DEBUG && print STDERR "Archy: acquired the lock \@ $lu\n";
         return 1;
     }
-    close $fh;
     
     # if non-blocking, return EXPIRED
     if ($timeout && $timeout < 0) {
-        close $fh;
+	if ($steal) {
+	    my @b = split //,_readall($fh);
+	    foreach my $i (0 .. $#b) {
+		my $stolen;
+		if (ord($b[$i]) >= STATE_LOCK && $i != $lu) {
+		    _writebyte($i, STATE_STOLEN);
+		    $stolen = $i;
+		}
+	    }
+	    if (defined($stolen)) {
+		# ??? lookup monitor id for $stolen?
+		carp "lock for $addr stolen by monitor $id";
+	    }
+	    _writebyte($fh, $lu, STATE_LOCK);
+	    close $fh;
+	    return 1;
+	}
+	close $fh;
 	$! = FAIL_EXPIRED;
 	$DEBUG && print STDERR "Archy: non-blocking, lock not avail \@ $lu\n";
 	return;
     }
+    close $fh;
 
     # wait until timeout for the lock
     my $left = $expire - time;
@@ -146,11 +164,30 @@ sub plock {
         if (_unlocked(_readall($fh))) {
             _writebyte($fh,$lu,STATE_LOCK);
 	    $DEBUG && print STDERR "Archy: acquired lock \@ $lu after wait\n";
+	    close $fh;
             return 1;
         }
         close $fh;
     }
-    close $fh;
+    if ($steal) {
+        open $fh, '+<', "$DIR/$addr";
+        flock $fh, LOCK_EX;
+	my @b = split //, _readall($fh);
+	foreach my $i (0 .. $#b) {
+	    my $stolen;
+	    if (ord($b[$i]) >= STATE_LOCK && $i != $lu) {
+		_writebyte($i, STATE_STOLEN);
+		$stolen = $i;
+	    }
+	}
+	if (defined($stolen)) {
+	    # ??? lookup monitor id for $stolen?
+	    carp "lock for $addr stolen by monitor $id";
+	}
+	_writebyte($fh, $lu, STATE_LOCK);
+	close $fh;
+	return 1;
+    }
     $! = FAIL_EXPIRED;
     $DEBUG && print STDERR "Archy: expired waiting for lock \@ $lu\n";
     return;
@@ -201,6 +238,15 @@ sub punlock {
 	$DEBUG && print STDERR
 	    "Archy: unlock successful \@ $lu. New state NULL\n";
         return 1;
+    } elsif ($ch == STATE_STOLEN) {
+	close $fh;
+	carp "punlock: lock was stolen";
+
+	# we don't know whether it was a single lock or a stack of locks
+	# that was stolen; preserve the STATE_STOLEN byte in case the
+	# monitor wants to call unlock again and again
+	
+	return "0 but true";
     }
     close $fh;
     carp "Patro::Archy: punlock called on $obj monitor without lock";
@@ -214,9 +260,14 @@ sub pwait {
     my $addr = _addr($obj);
     my $expire = $timeout > 0 ? time + $timeout : 9E19;
 
-    # !!! pwait must remove all stacked locks
-    if (!punlock($obj,$id)) {
+    my $unlocks = punlock($obj, $id, -1);
+    if (!$unlocks) {
+	$! = FAIL_INVALID_WO_LOCK;
         return;
+    } elsif ($unlocks == 0) {
+	# wait called but lock was stolen
+	$! = FAIL_INVALID_WO_LOCK;
+	return;
     }
     my $fh;
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;
@@ -235,6 +286,7 @@ sub pwait {
         $left = $expire - time;
 
         if ($ch == STATE_NOTIFY) {    # got notify
+
 	    open $fh, '+<', "$DIR/$addr";
 	    flock $fh, LOCK_EX;
 	    _writebyte($fh,$lu,STATE_NULL);
@@ -243,6 +295,13 @@ sub pwait {
 	    if ($left <= 0 || ($timeout && $timeout < 0)) {
 		$left = -1;
 	    }
+
+	    # if pwait was called on a stack of locks,
+	    # then we must restack the locks
+	    while ($unlocks > 1 && plock($obj,$id,$left)) {
+		$unlocks--;
+	    }
+	    return if $unlocks != 1;
             return plock($obj,$id,$left);
         }
 	last if $timeout && $timeout < 0;
