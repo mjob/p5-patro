@@ -593,6 +593,19 @@ sub process_request_SYNC {
 	} else {
 	    return Patro::Archy::punlock($obj, $monitor_id);
 	}
+    } elsif ($cmd eq 'state') {
+	my $state = Patro::Archy::pstate($obj, $monitor_id);
+	if ($state == Patro::Archy::STATE_NULL()) {
+	    return "0,NULL";
+	} elsif ($state == Patro::Archy::STATE_WAIT()) {
+	    return "1,WAIT";
+	} elsif ($state == Patro::Archy::STATE_NOTIFY()) {
+	    return "2,NOTIFY";
+	} elsif ($state == Patro::Archy::STATE_STOLEN()) {
+	    return "3,STOLEN";
+	} else {
+	    return "$state,LOCK";
+	}
     } else {
 	$@ = "Unrecognized SYNC command '$cmd'";
 	return;

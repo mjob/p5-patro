@@ -116,8 +116,6 @@ sub main::xdiag {
 
 # proxy synchronization
 
-my %lock_states;
-
 sub synchronize ($&;$$) {
     no overloading '%{}';
     my ($proxy, $block, $timeout, $steal) = @_;
@@ -183,6 +181,17 @@ sub unlock {
 	carp "Patro::unlock: unlock operation on $handle->{id} failed";
     }
     return $status;
+}
+
+sub lock_state {
+    my ($proxy) = @_;
+    no overloading '%{}';
+    my $handle = Patro::LeumJelly::handle($proxy);
+    my $state = Patro::LeumJelly::proxy_request( 
+	$handle, { topic => 'SYNC', command => 'state', context => 1,
+		   id => $handle->{id}, has_args => 0 } );
+    my ($num,$str) = split /,/, $state;
+    return Scalar::Util::dualvar($num,$str);
 }
 
 

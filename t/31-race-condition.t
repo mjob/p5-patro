@@ -78,9 +78,25 @@ my $p3 = getProxies($c);
 diag "p3=",$p3->{foo},",",$p3->{bar}," local=",$fb1->[0]+$fb2->[0],
     ",",$fb1->[1]+$fb2->[1];
 
+
 ok($p3->{foo} == $fb1->[0] + $fb2->[0],
    "thread-private counter consistent with synchronized counter");
 ok($p3->{bar} == $fb1->[1] + $fb2->[1],
    "thread-private counter consistent with synchronized counter");
+
+alarm 10;
+ok(Patro::lock_state($p3) == 0, 'proxy is unlocked');
+ok(Patro::lock_state($p3) eq 'NULL', 'can read NULL state as num or str');
+Patro::synchronize($p3, sub {
+    my $v1 = Patro::lock_state($p3);
+    ok($v1 eq 'LOCK', 'proxy locked inside synchronize block');
+    Patro::synchronize($p3, sub {
+	my $v2 = Patro::lock_state($p3);
+	ok($v2 eq 'LOCK', 'proxy locked inside nested synchronize');
+	ok($v2 == $v1+1, 'lock state demonstrates lock stack');
+		       } );
+		   } );
+alarm 0;
+
 
 done_testing;

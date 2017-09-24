@@ -349,6 +349,19 @@ sub pnotify {
     return $notified || "0 but true";
 }
 
+sub pstate {
+    my ($obj, $id) = @_;
+    my $lu = _lookup($id);
+    my $addr = _addr($obj);
+
+    my $fh;
+    open($fh,'+<',"$DIR/$addr") || return STATE_NULL;
+    # no need to lock?
+    my $state = _readbyte($fh,$lu);
+    close $fh;
+    return $state;
+}
+
 
 # extract the $n-th byte from filehandle $fh
 sub _readbyte {
