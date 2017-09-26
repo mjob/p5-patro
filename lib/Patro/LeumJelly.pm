@@ -164,6 +164,13 @@ sub proxy_request {
     }
     croak if ref($resp);
     $resp = deserialize_response($resp, $proxy->{client});
+    if ($resp->{_fatal}) {
+	# for debugging - for some errors in the server we want
+	# a stack trace in the client
+	Carp::cluck("Request caused a fatal error in the server:\n"
+		    . $resp->{_fatal});
+	exit;
+    }
     if ($resp->{error}) {
 	croak $resp->{error};
     }

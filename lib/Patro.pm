@@ -183,6 +183,26 @@ sub unlock {
     return $status;
 }
 
+sub wait {
+    my ($proxy,$timeout) = @_;
+    no overloading '%{}';
+    my $handle = Patro::LeumJelly::handle($proxy);
+    my $status = Patro::LeumJelly::proxy_request(
+	$handle, { topic => 'SYNC', command => 'wait', context => 1,
+		   has_args => defined($timeout), args => [$timeout] });
+    return $status;		   
+}
+
+sub notify {
+    my ($proxy, $count) = @_;
+    no overloading '%{}';
+    my $handle = Patro::LeumJelly::handle($proxy);
+    my $status = Patro::LeumJelly::proxy_request(
+	$handle, { topic => 'SYNC', command => 'notify', context => 1,
+		   has_args => defined($count), args => [ $count ] } );
+    return $status;
+}
+
 sub lock_state {
     my ($proxy) = @_;
     no overloading '%{}';

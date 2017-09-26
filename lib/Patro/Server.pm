@@ -368,7 +368,7 @@ sub watch_for_finishers {
 	    foreach my $subthread  (@joinable) {
 		my ($i) = grep {
 		    my $is = eval {$self->{meta}{subthreads}{$_} == $subthread};
-		    if ($@) {
+		    if ($@ && 0) {
 			::xdiag("Server: exception checking for finishers: ",
 				$@,"\n",$self->{meta},$self->{meta}{subthreads});
 		    }
@@ -580,6 +580,13 @@ sub process_request_SYNC {
 	return;
     }
     my $obj = $self->{obj}{$id};
+    if (!defined($obj)) {
+	our $SIDES;
+	$SIDES->{_fatal} = "Server: object id $id is not associated "
+	    . "with a known reference\n"
+	    . "Known ids: " . join(" ",sort keys %{$self->{obj}});
+	return;
+    }
     our $monitor_id;
     if ($cmd eq 'lock') {
 	if ($has_args) {
@@ -592,6 +599,18 @@ sub process_request_SYNC {
 	    return Patro::Archy::punlock($obj, $monitor_id, $args->[0]);
 	} else {
 	    return Patro::Archy::punlock($obj, $monitor_id);
+	}
+    } elsif ($cmd eq 'wait') {
+	if ($has_args) {
+	    return Patro::Archy::pwait($obj,$monitor_id,$args->[0]);
+	} else {
+	    return Patro::Archy::pwait($obj,$monitor_id);
+	}
+    } elsif ($cmd eq 'notify') {
+	if ($has_args) {
+	    return Patro::Archy::pnotify($obj,$monitor_id,$args->[0]);
+	} else {
+	    return Patro::Archy::pnotify($obj,$monitor_id);
 	}
     } elsif ($cmd eq 'state') {
 	my $state = Patro::Archy::pstate($obj, $monitor_id);
