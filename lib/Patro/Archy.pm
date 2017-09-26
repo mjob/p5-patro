@@ -434,8 +434,9 @@ in one thread or process, and an id that uniquely identifies a
 thread or process that seeks exclusive access to a resource.
 
 Like most such locks in Perl,
-the locks from this package are advisory -- they will only
-prevent access to the resource 
+the locks from this package are advisory -- they can only
+prevent access to the resource from other threads and processes
+that use the same locking scheme.
 
 
 =head1 FUNCTIONS
@@ -514,123 +515,33 @@ of the lock. Note that this call does not release the
 resource. Returns true on success.
 
 
+=head2 LIMITATIONS
 
-=head1 TODO
+Currently only works on systems that have a shared-memory
+virtual filesystem in C</dev/shm>.
 
-All functions should return true on success
+=head1 LICENSE AND COPYRIGHT
 
-$count argument in unlock function
+MIT License
 
+Copyright (c) 2017, Marty O'Brien
 
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-
-synchronization
-
-we want threads and processes to have exclusive access
-to some resources, even if they have to wait for it.
-
-A "monitor" (associated with a particular resource in a
-particular thread/process). At most one monitor can have
-a "lock" on a resource at a time. A monitor is in one of
-three states:
-
-    NULL: does not have a lock on the resource
-    LOCK: has the lock on the resource
-    WAIT: recently had the lock on the resource and it waiting
-          for another monitor to call "notify"
-
-Monitors can make requests about resource access
-
-    lock - request exclusive access to the resource
-    - optional parameters: timeout, non-blocking
-    - not valid unless called from state NULL
-
-    unlock - relinquish access to the resource
-    - all monitors of a thread/process should unlock all
-      resources when the thread/process exits
-    - should no-op unless called from state LOCK
-
-    wait - relinquish access to the resource. wait for "notify"
-           and then try to get access to the resource again
-    - optional parameters: timeout
-    - not valid unless called from state LOCK
-
-    notify - call "notify" on up to _count_ other monitors
-             currently in the wait mode
-    - optional parameter: count
-
-The resource manager receives and responds to requests from
-monitors. The resource manager should be run in a single
-thread or should be synchronized itself.
-
-    on lock request:
-        if resource is assigned:
-            if request is non-blocking: return EXPIRED
-            put request in the lock queue
-            if request is timed, set an alarm
-        if resource is unassigned:
-            assign resource to the monitor making the request
-            change monitor state to LOCK
-            return SUCCESS
-
-    on unlock request
-        change monitor's state to NULL
-        unassign the resource
-        foreach request in the lock queue:
-            if request has expired: return EXPIRED to that monitor
-            assign resource to the request's monitor
-            change request's monitor state to LOCK        
-
-    on wait request:
-        change monitor state to WAIT
-        unassign the resource
-        put the request on the wait queue
-        work the lock queue like you would after an unlock request
-
-    on notify request:
-        for 1 to count:
-            move a request from the wait queue to the lock queue
-
-    from time to time:
-        find expired requests in the lock queue and wait queue
-            and return EXPIRED to their respective monitors
-
-The more I think about, the more I see that the resource monitor
-cannot be its own thread. Each thread must act as its own
-resource monitor, locking out the others, doing its lock maintenance
-as quickly as possible, and relinquishing the mutex.
-
-
-In fact, I view the synchronization implementation as requiring
-two synchronization elements.
-
-1. a simple but reliable mutex. Maybe a semaphore -or- file lock
-   on the shared memory that governs the resource.
-
-2. a shared data structure -- shared memory or an external file, as
-   the data cannot live inside any single process -- with wait queue
-   information.
-
-I'm going to revise my view again. The data structure needs to hold
-a list of wait events that indicate
-
-1. the thread/process identifier of the waiting monitor, and
-2. a flag to indicate if the monitor has been notified (and waiting
-   for the correct monitor to notice)
-
-Heck, instead of a flag, you can have a byte that keeps track
-of the state of each monitor:
-
-   0 = not used because writebyte($n,0) doesn't work?
-   1 = not waiting
-   2 = waiting
-   3 = notified, or seeking lock
-   4 = has lock
-
-Each monitor knows when its operation expires, if it does,
-so there is no need for that information in the shared data.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 =cut
-
-

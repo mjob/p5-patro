@@ -5,23 +5,27 @@ use Patro ':test';
 # blocking queue - server will put objects on the queue
 #    and proxy clients will take them. Exercises wait/notify.
 
-$Patro::Server::OPTS{keep_alive} = 999;
-$Patro::Server::OPTS{idle_timeout} = 999;
-$Patro::Server::OPTS{fincheck_freq} = 999;
+$Patro::Server::OPTS{keep_alive} = 15;
+$Patro::Server::OPTS{idle_timeout} = 15;
+$Patro::Server::OPTS{fincheck_freq} = 15;
 
-if (!$threads::threads) {
-    diag "# $0 test requires threads";
-    ok(1, "# skip all tests - threads required");
+if (!$Patro::Server::threads_avail ||
+    !eval "require Patro::Archy;1") {
+    diag "# synchronization tests require threads and Patro::Archy";
+    ok(1,'# synchronization tests require threads and Patro::Archy');
     done_testing;
     exit;
 }
 
+alarm 15;  # in case the tests don't work and we deadlock
 my $q1 = BlockingQueue->new(10);
 my $cfg = patronize($q1);
 
 sub take_thread {
     my ($inc) = @_;
+    diag "take_thread $inc";
     $q = getProxies($cfg);
+    diag "got proxy";
 
     # BlockingQueue::take has Patro::wait/Patro::notify calls,
     # which should be called from a proxy client. If we say
@@ -35,7 +39,7 @@ sub take_thread {
 	Patro::synchronize($q,sub { $q->{val3} += $item });
     }
     Patro::synchronize($q, sub { $q->{finished} += $inc });
-    diag "---------- finished ", threads->tid, " ----------";
+    #diag "---------- finished ", threads->tid, " ----------";
 }
 
 sub make_thread {
@@ -53,7 +57,7 @@ sub make_thread {
 }
 
 
-my $t1 = threads->create( sub { take_thread(1) } );
+my $t1 = threads->create( sub { alarm 10; take_thread(1) } );
 my $t2 = threads->create( sub { take_thread(2) } );
 my $t3 = threads->create( sub { take_thread(4) } );
 my $t4 = threads->create( 'make_thread' );
@@ -85,7 +89,7 @@ sub put {  # call from synchronized block
     Patro::synchronize( $self, 
 	sub {
 	    while (@{$self->{queue}} >= $self->{capacity}) {
-		Test::More::diag "Blocking queue waiting to put";
+		#Test::More::diag "Blocking queue waiting to put";
 		Patro::wait($self);
 	    }
 	    $self->{val1} += $element;
@@ -101,7 +105,8 @@ sub take {
 	sub {
 	    while (@{$self->{queue}} == 0) {
 		return if $self->{done};
-		Test::More::diag "BlockingQueue waiting to take in ",threads->tid;
+		#Test::More::diag
+		#    "BlockingQueue waiting to take in ",threads->tid;
 		Patro::wait($self);
 	    }
 	    my $item = shift @{$self->{queue}};

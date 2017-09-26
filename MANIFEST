@@ -40,3 +40,4 @@ t/20c-overload.t
 t/21-sideeffects.t
 t/30-patroarchy.t
 t/31-race-condition.t
+t/32-waitnotify.t
