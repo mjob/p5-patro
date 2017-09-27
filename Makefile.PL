@@ -4,7 +4,8 @@ use ExtUtils::MakeMaker;
 use 5.010001;
 
 our %RECOMMENDED = (
-    'Sys::HostAddr' => 0
+    'Sys::HostAddr' => 0,
+    'Storable' => '2.45',
     );
 our %REQUIRED = (
     'Devel::GlobalDestruction' => 0,

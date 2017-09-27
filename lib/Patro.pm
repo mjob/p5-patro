@@ -806,6 +806,10 @@ than the remote server. So you will not observe a change in the
 reference on the server (unless you use a class that does not save
 state in local memory, like L<Forks::Queue>).
 
+The synchronization functions L<Patro::wait|/"wait"> and
+L<Patro::notify|/"notify"> seem to require at least version
+2.45 of the L<Storable> module.
+
 
 =head1 DOCUMENTATION AND SUPPORT
 

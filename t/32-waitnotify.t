@@ -17,15 +17,18 @@ if (!$Patro::Server::threads_avail ||
     exit;
 }
 
+if (Storable->VERSION < 2.45) {
+    diag "Storable version is ", Storable->VERSION;
+    diag "If this test hangs or segfaults, upgrade to at least Storable 2.45";
+}
+
 alarm 15;  # in case the tests don't work and we deadlock
 my $q1 = BlockingQueue->new(10);
 my $cfg = patronize($q1);
 
 sub take_thread {
     my ($inc) = @_;
-    diag "take_thread $inc";
     $q = getProxies($cfg);
-    diag "got proxy";
 
     # BlockingQueue::take has Patro::wait/Patro::notify calls,
     # which should be called from a proxy client. If we say
@@ -35,7 +38,7 @@ sub take_thread {
     
     while (defined(my $item = BlockingQueue::take($q))) {
 	select undef,undef,undef,$item;
-	diag "Took $item in ",threads->tid;
+	# diag "Took $item in ",threads->tid;
 	Patro::synchronize($q,sub { $q->{val3} += $item });
     }
     Patro::synchronize($q, sub { $q->{finished} += $inc });
@@ -116,13 +119,11 @@ sub take {
 	} );
 }
 
+=pod notes
 
-=pod
-
-yeah, this is not going to work.
-When put and take get called from the client,
-they get executed on the server.
-
-Oh, maybe it will work if you don't use method indirection.
+segfaults with Storable 2.27
+segfaults with Storable 2.39
+ok with Storable 2.45
+ok with Storable 2.53_01
 
 =cut

@@ -34,8 +34,15 @@ our $DEBUG;
 
 my $DIR;
 $DIR //= do {
-    my $d = "/dev/shm/resources-$$";
+    my $d = "/dev/shm/patro-resources-$$";
+#    if ($^O eq 'MSWin32') {
+#	$d = "C:/Temp/resource-$$";
+    #    }
+    if (! -d "/dev/shm" && -d "/tmp") {
+	$d = "/tmp/patro-resources-$$";
+    }
     my $pid = $$;
+    # !!! need to clean up resource dir when program exits
     $d;
 };
 mkdir $DIR,0755 unless -d $DIR;
@@ -99,6 +106,7 @@ sub plock {
     my $expire = $timeout && $timeout > 0 ? time + $timeout : 9E19;
     my $fh;
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;
+    binmode $fh;
     flock $fh, LOCK_EX;
 
     $DEBUG && print STDERR "Archy: checking state for $DIR/$addr\@$lu\n";
@@ -157,6 +165,7 @@ sub plock {
 	$threads::threads ? threads->yield : sleep 1;
 
         open $fh, '+<', "$DIR/$addr";
+	binmode $fh;
         flock $fh, LOCK_EX;
         $left = $expire - time;
 	$DEBUG && print STDERR "Archy: waiting for lock \@ $lu (up to $left)\n";
@@ -171,6 +180,7 @@ sub plock {
     }
     if ($steal) {
         open $fh, '+<', "$DIR/$addr";
+	binmode $fh;
         flock $fh, LOCK_EX;
 	my @b = split //, _readall($fh);
 	foreach my $i (0 .. $#b) {
@@ -201,6 +211,7 @@ sub punlock {
 
     my $fh;
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;
+    binmode $fh;
     flock $fh, LOCK_EX;
 
     # if we already have the lock, decrement the lock counter and return OK
@@ -258,7 +269,7 @@ sub pwait {
     my ($obj, $id, $timeout) = @_;
     my $lu = _lookup($id);
     my $addr = _addr($obj);
-    my $expire = $timeout > 0 ? time + $timeout : 9E19;
+    my $expire = $timeout && $timeout > 0 ? time + $timeout : 9E19;
 
     my $unlocks = punlock($obj, $id, -1);
     if (!$unlocks) {
@@ -271,6 +282,7 @@ sub pwait {
     }
     my $fh;
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;
+    binmode $fh;
     flock $fh, LOCK_EX;
     _writebyte($fh,$lu,STATE_WAIT);
     close $fh;
@@ -280,6 +292,7 @@ sub pwait {
 	$threads::threads ? threads->yield : sleep 1;
 
         open $fh, '+<', "$DIR/$addr";
+	binmode $fh;
         flock $fh, LOCK_EX;
         my $ch = _readbyte($fh,$lu);
         close $fh;
@@ -288,6 +301,7 @@ sub pwait {
         if ($ch == STATE_NOTIFY) {    # got notify
 
 	    open $fh, '+<', "$DIR/$addr";
+	    binmode $fh;
 	    flock $fh, LOCK_EX;
 	    _writebyte($fh,$lu,STATE_NULL);
 	    close $fh;
@@ -322,6 +336,7 @@ sub pnotify {
 
     my $fh;
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;
+    binmode $fh;
     flock $fh, LOCK_EX;
     seek $fh, 0, SEEK_END;
     my $sz = tell($fh);
@@ -356,6 +371,7 @@ sub pstate {
 
     my $fh;
     open($fh,'+<',"$DIR/$addr") || return STATE_NULL;
+    binmode $fh;
     # no need to lock?
     my $state = _readbyte($fh,$lu);
     close $fh;
