@@ -19,7 +19,6 @@ sub import {
     my ($class, @args) = @_;
     my @tags = grep /^:/, @args;
     @args = grep !/^:/, @args;
-    $Patro::SECURE = 1;
     foreach my $tag (@tags) {
 	if ($tag eq ':test') {
 	    require Patro::Server;
@@ -37,7 +36,8 @@ sub import {
 	    push @EXPORT, 'xjoin';
 	}
 	if ($tag eq ':insecure') {
-	    $Patro::SECURE = 0;
+	    $Patro::Server::OPTS{secure_filehandles} = 0;
+	    $Patro::Server::OPTS{steal_lock_ok} = 1;
 	}
     }
 

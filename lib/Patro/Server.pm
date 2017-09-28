@@ -22,9 +22,14 @@ if ($ENV{PATRO_SERVER_DEBUG}) {
 our $VERSION = '0.16';
 our @SERVERS :shared;
 our %OPTS;
+
 $OPTS{keep_alive} //= 30;
 $OPTS{idle_timeout} //= 30;
 $OPTS{fincheck_freq} //= 5;
+
+$OPTS{secure_filehandles} //= 1;
+$OPTS{steal_lock_ok} //= 1;
+
 
 sub new {
     my $pkg = shift;
@@ -589,7 +594,15 @@ sub process_request_SYNC {
     }
     our $monitor_id;
     if ($cmd eq 'lock') {
+	our $SIDES;
 	if ($has_args) {
+	    if (!$OPTS{steal_lock_ok}) {
+		if ($args->[1]) {
+		    $SIDES->{warn} = "Patro::lock: steal=true not allowed "
+				   . "by server";
+		    $args->[1] = 0;
+		}
+	    }
 	    return Patro::Archy::plock($obj, $monitor_id, @$args);
 	} else {
 	    return Patro::Archy::plock($obj, $monitor_id);
@@ -860,14 +873,14 @@ sub process_request_HANDLE {
 	}
 	return $z;
     } elsif ($command eq 'CLOSE') {
-	if ($Patro::SECURE) {
+	if ($OPTS{secure_filehandles}) {
 	    $@ = "Patro: insecure CLOSE operation on proxy filehandle";
 	    return;
 	}
 	my $z = close $fh;
 	return $z;    
     } elsif ($command eq 'OPEN') {
-	if ($Patro::SECURE) {
+	if ($OPTS{secure_filehandles}) {
 	    $@ = "Patro: insecure OPEN operation on proxy filehandle";
 	    return;
 	}
@@ -883,7 +896,7 @@ sub process_request_HANDLE {
 		$z = open $fh, $mode, $expr, @$args;
 	    }
 	}
-
+	
 	# it is hard to set autoflush from the proxy.
 	# Since it is usually what you want, let's do it here.
 	if ($z) {
@@ -924,17 +937,17 @@ sub process_request_HANDLE {
 	}
 	return eval "-$key \$fh";
     } elsif ($command eq 'SYSOPEN') {
-	if ($Patro::SECURE) {
+	if ($OPTS{secure_filehandles}) {
 	    $@ = "Patro: insecure SYSOPEN operation on proxy filehandle";
 	    return;
 	}
         my $z = @$args <= 2 ? sysopen $fh, $args->[0], $args->[1]
-                      : sysopen $fh, $args->[0], $args->[1], $args->[2];
+                            : sysopen $fh, $args->[0], $args->[1], $args->[2];
         return $z;
 
     # commands that operate on DIRHANDLEs
     } elsif ($command eq 'OPENDIR') {
-        if ($Patro::SECURE) {
+        if ($OPTS{secure_filehandles}) {
             $@ = "Patro: insecure OPENDIR operation on proxy dirhandle";
             return;
         }
