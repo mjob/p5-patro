@@ -1221,6 +1221,91 @@ The server handles requests for any references that are being served,
 manipulates references on the server, and returns the results of
 operations to the proxy objects on the clients.
 
+=head1 SERVER OPTIONS
+
+Server options are configured through the global
+C<%Patro::Server::OPTS> hash. Changes to this hash generally
+only affect servers in threads and processes that are started
+after the changes are made; any desired changes should be
+made before the first call to L<Patro/"patronize">.
+
+The server recognizes the following options in the
+C<%Patro::Server::OPTS> hash:
+
+=head2 Server operation options
+
+In its original incarnation, I imagined that the servers and
+clients would be tightly coupled. A server would start, and
+then the same person that started the server would start one
+or more clients on other machines in the same cluster. The
+clients would perform some tasks, and then exit. When the last
+client disconnected, and after a little bit of waiting to see
+if any new clients would connect, the server would shut down.
+Other server use cases are possible, but this is the use case
+that informed these server settings.
+
+=over 4
+
+=item keep_alive => seconds
+
+After the server starts, this is the number of seconds it is
+guaranteed to stay up, even if no clients connect to it.
+The default is 30 seconds; you could set this to a very
+large value in order to have a persistent server.
+
+=item idle_timeout => seconds
+
+After all clients have disconnected, this is the number of
+seconds to wait for another client to connect. If another
+client does not connect before this time expires, then the
+server will shut down (also subject to satisfying the
+C<keep_alive> timeout, described above). The default is
+30 seconds.
+
+=item fincheck_freq => seconds
+
+The number of seconds in between checks of which clients
+are still active. When no active clients are detected,
+the C<idle_timeout> count down will begin.
+
+This check is implemented with a C<SIGALRM>. That may be
+inconvenient to the many other programs and modules that
+would use C<SIGALRM> though, so this may change in the future.
+
+=back
+
+=head2 Server security options
+
+These options indicate whether certain operations that may
+be insecure or impolite are allowed on the server.
+
+=over 4
+
+=item secure_filehandles => bool
+
+If this option is true, then proxies to filehandles will
+receive an error if they execute the C<open> or C<close>
+functions on the filehandles. If the C<open> function is
+allowed, the client will have read/write access (with
+the userid of the server process) to any file on the
+server filesystem. Worse, the client could use a pipe
+open (C<open $proxy_fh, "| arbitrary command">) and
+execute arbitrary code on the server. Calling C<close>
+on a proxy filehandle is not so dangerous but it would still
+not be allowed if this option is set.
+
+=item steal_lock_ok => bool
+
+C<Patro> provides advisory locking on remote references.
+One option to the L<Patro::lock|Patro/"lock"> function is
+to allow a lock to be stolen from another monitor. Whether
+stealing locks should be allowed depends a lot on your
+application. Some reasons you might want to allow it is if
+you have slow and unreliable processes or if your application
+is prone to deadlock.
+
+=back
+
 =head1 LICENSE AND COPYRIGHT
 
 MIT License

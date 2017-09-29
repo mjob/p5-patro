@@ -427,6 +427,7 @@ server's user id. Or worse, a client could open a pipe through the handle
 to run an arbitrary command on the server. C<open> and C<close> operations
 on proxy filehandles will not be allowed unless the process running the
 Patro server imports C<Patro> with the C<:insecure> tag.
+See L<Patro::Server/"SERVER OPTIONS"> for more information.
 
 =back
 
@@ -777,6 +778,20 @@ C<lock> and C<wait> are also names for important Perl builtins.
 As of v0.16, these synchronization features require that the
 server be run on a system that has the C</dev/shm> shared
 memory virtual filesystem.
+
+
+=head1 EXPORTS
+
+C<Patro> exports the L<"patronize"> function, to be used by a server,
+and L<"getProxies">, to be used by a client.
+
+The C<:insecure> tag configures the server to allow insecure
+operations through a proxy. As of v0.16, this includes calling
+C<open> and C<close> on a proxy filehandle, and stealing a lock
+(see L<"lock">, above) on a remote reference from another thread.
+This tag only affects programs that are serving remote objects.
+You can not disable this security, such as it as, in the server
+by applying the C<:insecure> tag in a client program.
 
 
 =head1 ENVIRONMENT
