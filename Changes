@@ -1,6 +1,9 @@
 Revision history for Patro
 --------------------------
 
+0.17	...
+	The next great thing to happen to Patro.
+
 0.16	2017-09-28
 	- Address insecure string eval in overload handler
 	- Support synchronization of remote objects through
