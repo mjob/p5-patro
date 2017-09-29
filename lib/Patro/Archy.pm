@@ -29,7 +29,7 @@ use constant {
     FAIL_DURING_RELOCK => 1004,
     FAIL_DEEP_RECURSION => 1111,
 };
-our $VERSION = '0.16';
+our $VERSION = '0.17';
 our $DEBUG;
 
 my $DIR;

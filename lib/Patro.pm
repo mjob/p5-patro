@@ -11,7 +11,7 @@ use base 'Exporter';
 no overloading '%{}', '${}';
 
 our @EXPORT = qw(patronize getProxies);
-our $VERSION = '0.16';
+our $VERSION = '0.17';
 
 BEGIN { *CORE::GLOBAL::ref = \&Patro::ref };
 
@@ -284,7 +284,7 @@ Patro - proxy access to remote objects
 
 =head1 VERSION
 
-0.16
+0.17
 
 
 =head1 SYNOPSIS
