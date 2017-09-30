@@ -2,6 +2,7 @@
 Changes
 lib/Patro.pm
 lib/Patro/Archy.pm
+lib/Patro/Butes.pm
 lib/Patro/LeumJelly.pm
 lib/Patro/Mony.pm
 lib/Patro/N1.pm
@@ -41,3 +42,5 @@ t/21-sideeffects.t
 t/30-patroarchy.t
 t/31-race-condition.t
 t/32-waitnotify.t
+t/40-private.t
+t/41-patroprivate.t

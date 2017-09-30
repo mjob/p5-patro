@@ -10,7 +10,8 @@ our %RECOMMENDED = (
 our %REQUIRED = (
     'Devel::GlobalDestruction' => 0,
     'Storable' => 0,
-    'MIME::Base64' => 0 
+    'MIME::Base64' => 0,
+    'Attribute::Handlers' => 0,    
     );
 our @NO_INDEX = ( 'threads::shared' );
 
