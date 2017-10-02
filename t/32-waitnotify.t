@@ -1,9 +1,15 @@
+BEGIN {
+    if ($^O eq 'MSWIn32') {
+	# poor man's alarm, in case the test hangs
+	system(1,$^X,-e => "sleep 1,kill(0,$$)||exit for 1..30;
+	                    kill -9,$pid;system('taskkill /f /pid $$')");
+    }
+}
+
 use Test::More;
 use Patro ':test';
-
-
-# blocking queue - server will put objects on the queue
-#    and proxy clients will take them. Exercises wait/notify.
+use strict;
+use warnings;
 
 $Patro::Server::OPTS{keep_alive} = 15;
 $Patro::Server::OPTS{idle_timeout} = 15;
@@ -22,13 +28,16 @@ if (Storable->VERSION < 2.45) {
     diag "If this test hangs or segfaults, upgrade to at least Storable 2.45";
 }
 
-alarm 15;  # in case the tests don't work and we deadlock
+# blocking queue - server will put objects on the queue
+#    and proxy clients will take them. Exercises wait/notify.
+
 my $q1 = BlockingQueue->new(10);
 my $cfg = patronize($q1);
 
 sub take_thread {
     my ($inc) = @_;
-    $q = getProxies($cfg);
+    alarm 10;
+    my $q = getProxies($cfg);
 
     # BlockingQueue::take has Patro::wait/Patro::notify calls,
     # which should be called from a proxy client. If we say
@@ -38,11 +47,10 @@ sub take_thread {
     
     while (defined(my $item = BlockingQueue::take($q))) {
 	select undef,undef,undef,$item;
-	# diag "Took $item in ",threads->tid;
 	Patro::synchronize($q,sub { $q->{val3} += $item });
     }
     Patro::synchronize($q, sub { $q->{finished} += $inc });
-    #diag "---------- finished ", threads->tid, " ----------";
+    alarm 0;
 }
 
 sub make_thread {
@@ -60,7 +68,7 @@ sub make_thread {
 }
 
 
-my $t1 = threads->create( sub { alarm 10; take_thread(1) } );
+my $t1 = threads->create( sub { take_thread(1) } );
 my $t2 = threads->create( sub { take_thread(2) } );
 my $t3 = threads->create( sub { take_thread(4) } );
 my $t4 = threads->create( 'make_thread' );

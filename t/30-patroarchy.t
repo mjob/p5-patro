@@ -22,6 +22,16 @@ close STDERR;
 open STDERR, '+>', \$STDERR;
 (*STDERR)->autoflush(1);
 
+if ($^O eq 'MSWin32') {
+    # on Windows, return value of Patro::Archy::_addr() is not preserved
+    # across a fork except for shared references, and will cause
+    # some of tests 27-36 to fail and hang
+    require threads; threads->import;
+    require threadsx::shared; threadsx::shared->import;
+    $foo = shared_clone($foo);
+    $bar = shared_clone($bar);
+}
+
 alarm 20;
 ok(plock($foo, "monitor-0"), 'lock');
 ok(1 == punlock($foo, "monitor-0"), 'unlock');
@@ -105,11 +115,9 @@ CORE::wait;
 alarm 20;
 for my $monitor ("child-A", "child-B", "child-C") {
     if (CORE::fork() == 0) {
-#	diag "multinotify $monitor $$ launch";
 	plock($bar, $monitor);
 	pwait($bar, $monitor);
 	punlock($bar, $monitor);
-#	diag "multinotify $monitor $$ exit";
 	exit;
     }
 }
@@ -128,12 +136,10 @@ CORE::wait for 1..3;
 alarm 20;
 pipe RR,WW;
 if (CORE::fork() == 0) {
-#    diag "steal fork $$ launch";
     plock($bar, "child-E",2);
     print WW "\n"; close WW;
     sleep 5;
     punlock($bar, "child-E");
-#    diag "steal fork $$ exit";
     exit;
 }
 
