@@ -30,7 +30,7 @@ if (@NO_INDEX) {
 }
 
 our $FILES_TO_CLEAN
-    = join " ", qw(Patro-* t/cfg*);
+    = join " ", qw(Patro-* t/cfg* t/t-05*);
 
 our @TEST_FILES = ('t/*.t');
 

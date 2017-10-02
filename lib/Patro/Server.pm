@@ -772,6 +772,7 @@ sub process_request_METHOD {
 	return;
     }
     my @r;
+    local $Patro::ProhibitPrivate = 1;
     if ($command =~ /::/) {
 	no strict 'refs';
 	if ($context < 2) {

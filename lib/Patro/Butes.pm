@@ -9,8 +9,8 @@ my %private_wrap;
 sub caller_ok {
     my ($pkg) = @_;
     my $c1 = caller(1);
-    #return $c1 && $c1 ne 'Patro::Server';
-    return ($c1 && $c1->isa($pkg)) || $pkg->isa($c1);
+    return ($c1 && $c1->isa($pkg))
+	|| $pkg->isa($c1);
 }
 
 sub PatroPrivate : ATTR(CODE) {
