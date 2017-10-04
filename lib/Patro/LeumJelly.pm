@@ -23,13 +23,13 @@ sub isProxyRef {
 }
 
 sub handle {
-    my ($proxy) = @_;
+    my ($proxy,$quiet) = @_;
     my $ref = CORE::ref($proxy);
     if ($proxyClasses{$ref}) {
 	return $proxy;
     } elsif (defined $proxyClasses{$ref}) {
 	return ${$proxy};
-    } else {
+    } elsif (!$quiet) {
 	croak "Not a Patro proxy object";
     }
 }

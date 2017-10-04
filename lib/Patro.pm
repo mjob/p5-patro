@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use Patro::Mony;
 use Patro::LeumJelly;
+use Patro::Archy;
 use Scalar::Util;
 use Data::Dumper;
 use Socket ();
@@ -116,6 +117,8 @@ sub main::xdiag {
 
 # proxy synchronization
 
+sub _mid () { "$$-" . threads->tid }
+
 sub synchronize ($&;$$) {
     no overloading '%{}';
     my ($proxy, $block, $timeout, $steal) = @_;
@@ -145,10 +148,9 @@ sub synchronize ($&;$$) {
 
 sub lock {
     my ($proxy, $timeout, $steal) = @_;
-    my $handle = Patro::LeumJelly::handle($proxy);
+    my $handle = Patro::LeumJelly::handle($proxy,1);
     if (!$handle) {
-	carp "Patro::lock: not a proxy";
-	return;
+	return Patro::Archy::plock($proxy,_mid,$timeout,$steal);
     }
     my $status = Patro::LeumJelly::proxy_request(
 	$handle,
@@ -167,9 +169,9 @@ sub lock {
 sub unlock {
     my ($proxy, $count) = @_;
     $count ||= 1;
-    my $handle = Patro::LeumJelly::handle($proxy);
+    my $handle = Patro::LeumJelly::handle($proxy,1);
     if (!$handle) {
-	carp "Patro::unlock: not a proxy";
+	return Patro::Archy::punlock($proxy,_mid,$count);
     }
     my $status = Patro::LeumJelly::proxy_request(
 	$handle,
@@ -186,7 +188,10 @@ sub unlock {
 sub wait {
     my ($proxy,$timeout) = @_;
     no overloading '%{}';
-    my $handle = Patro::LeumJelly::handle($proxy);
+    my $handle = Patro::LeumJelly::handle($proxy,1);
+    if (!$handle) {
+	return Patro::Archy::pwait($proxy,_mid,$timeout);
+    }
     my $status = Patro::LeumJelly::proxy_request(
 	$handle, { topic => 'SYNC', command => 'wait', context => 1,
 		   has_args => defined($timeout), args => [$timeout] });
@@ -196,7 +201,10 @@ sub wait {
 sub notify {
     my ($proxy, $count) = @_;
     no overloading '%{}';
-    my $handle = Patro::LeumJelly::handle($proxy);
+    my $handle = Patro::LeumJelly::handle($proxy,1);
+    if (!$handle) {
+	return Patro::Archy::pnotify($proxy,_mid,$count);
+    }
     my $status = Patro::LeumJelly::proxy_request(
 	$handle, { topic => 'SYNC', command => 'notify', context => 1,
 		   has_args => defined($count), args => [ $count ] } );
@@ -206,7 +214,10 @@ sub notify {
 sub lock_state {
     my ($proxy) = @_;
     no overloading '%{}';
-    my $handle = Patro::LeumJelly::handle($proxy);
+    my $handle = Patro::LeumJelly::handle($proxy,1);
+    if (!$handle) {
+	...
+    }
     my $state = Patro::LeumJelly::proxy_request( 
 	$handle, { topic => 'SYNC', command => 'state', context => 1,
 		   id => $handle->{id}, has_args => 0 } );

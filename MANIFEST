@@ -44,3 +44,4 @@ t/31-race-condition.t
 t/32-waitnotify.t
 t/40-private.t
 t/41-patroprivate.t
+t/42-race-condition.t

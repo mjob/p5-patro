@@ -35,9 +35,6 @@ our $DEBUG;
 my $DIR;
 $DIR //= do {
     my $d = "/dev/shm/patro-resources-$$";
-#    if ($^O eq 'MSWin32') {
-#	$d = "C:/Temp/resource-$$";
-    #    }
     if (! -d "/dev/shm" && -d "/tmp") {
 	$d = "/tmp/patro-resources-$$";
     }
@@ -109,7 +106,7 @@ sub plock {
     binmode $fh;
     flock $fh, LOCK_EX;
 
-    $DEBUG && print STDERR "Archy: checking state for $DIR/$addr\@$lu\n";
+    $DEBUG && print STDERR "Archy: locking $DIR/$addr \@ $lu id=$id\n";
 
     # if we already have the lock, increment the lock counter and return OK
     my $ch = _readbyte($fh,$lu);
@@ -215,7 +212,7 @@ sub punlock {
     flock $fh, LOCK_EX;
 
     # if we already have the lock, decrement the lock counter and return OK
-    $DEBUG && print STDERR "Archy: checking state for unlock \@ $lu\n";
+    $DEBUG && print STDERR "Archy: unlocking $DIR/$addr \@ $lu id=$id\n";
     $ch = _readbyte($fh,$lu);
     if ($ch > STATE_LOCK) {
 	if ($count < 0) {
@@ -260,7 +257,7 @@ sub punlock {
 	return "0 but true";
     }
     close $fh;
-    carp "Patro::Archy: punlock called on $obj monitor without lock";
+    carp "Patro::Archy: punlock called on $obj (id=$id) monitor without lock";
     $! = FAIL_INVALID_WO_LOCK;
     return;
 }
@@ -270,6 +267,8 @@ sub pwait {
     my $lu = _lookup($id);
     my $addr = _addr($obj);
     my $expire = $timeout && $timeout > 0 ? time + $timeout : 9E19;
+
+    $DEBUG && print STDERR "Archy: waiting on $DIR/$addr \@ $lu id=$id\n";
 
     my $unlocks = punlock($obj, $id, -1);
     if (!$unlocks) {
@@ -334,6 +333,8 @@ sub pnotify {
     my $lu = _lookup($id);
     my $addr = _addr($obj);
 
+    $DEBUG && print STDERR "Archy: notify on $DIR/$addr \@ $lu id=$id\n";
+
     my $fh;
     open($fh,'+<',"$DIR/$addr") || open($fh,'+>', "$DIR/$addr") || die;
     binmode $fh;
@@ -344,7 +345,7 @@ sub pnotify {
     # assert that this monitor holds the resource
     my $ch = _readbyte($fh,$lu);
     if ($ch < STATE_LOCK) {
-	carp "Patro::Archy: pnotify called on $obj monitor without lock";
+	carp "Patro::Archy: pnotify called on $obj (id=$id) monitor without lock (state $ch)";
 	$! = FAIL_INVALID_WO_LOCK;
 	return;
     }

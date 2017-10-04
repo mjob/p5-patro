@@ -11,9 +11,10 @@ use Patro ':test';
 use strict;
 use warnings;
 
-$Patro::Server::OPTS{keep_alive} = 15;
-$Patro::Server::OPTS{idle_timeout} = 15;
-$Patro::Server::OPTS{fincheck_freq} = 15;
+$Patro::Server::OPTS{keep_alive} = 9945;
+$Patro::Server::OPTS{idle_timeout} = 9945;
+$Patro::Server::OPTS{fincheck_freq} = 9945;
+$Patro::Archy::DEBUG = 0;
 
 if (!$Patro::Server::threads_avail ||
     !eval "require Patro::Archy;1") {
@@ -34,6 +35,7 @@ if (Storable->VERSION lt 2.45) {
 # blocking queue - server will put objects on the queue
 #    and proxy clients will take them. Exercises wait/notify.
 
+require Patro::Archy;
 my $q1 = BlockingQueue->new(10);
 my $cfg = patronize($q1);
 
@@ -48,7 +50,7 @@ sub take_thread {
     # and the embedded wait/notify calls will fail, so we
     # use direct BlockingQueue::take call instead.
     
-    while (defined(my $item = BlockingQueue::take($q))) {
+    while (defined(my $item = $q->take)) { #BlockingQueue::take($q))) {
 	select undef,undef,undef,$item;
 	Patro::synchronize($q,sub { $q->{val3} += $item });
     }
@@ -62,9 +64,10 @@ sub make_thread {
     # Prefer BlockingQueue::put($q,...) to $q->put,
     # see note in 'take_thread'
     
-    for my $i (1..4) {
-	for my $j (1 .. 10) {
-	    BlockingQueue::put($p0, 0.001 * int(200 * rand));
+    for my $i (1..1) {
+	for my $j (1 .. 3) {
+	    my $item = 0.001 * int(200 * rand);
+	    $p0->put($item);
 	}
     }
     Patro::synchronize($p0, sub { $p0->{done} = 1 });
@@ -91,6 +94,7 @@ done_testing;
 
 
 package BlockingQueue;
+use base 'Patro::Butes';
 sub new {
     my ($pkg,$capacity) = @_;
     my $self = { queue => [], capacity => $capacity,
@@ -98,36 +102,27 @@ sub new {
     return bless $self, $pkg;
 }
 
-sub put {  # call from synchronized block
+sub put :Synchronized {  # call from synchronized block
     my ($self,$element) = @_;
-    Patro::synchronize( $self, 
-	sub {
-	    while (@{$self->{queue}} >= $self->{capacity}) {
-		#Test::More::diag "Blocking queue waiting to put";
-		Patro::wait($self);
-	    }
-	    $self->{val1} += $element;
-	    push @{$self->{queue}}, $element;
-	    Patro::notify($self, -1);
-	});
+    while (@{$self->{queue}} >= $self->{capacity}) {
+	#Test::More::diag "Blocking queue waiting to put";
+	Patro::wait($self);
+    }
+    $self->{val1} += $element;
+    push @{$self->{queue}}, $element;
+    Patro::notify($self, -1);
 }
 
-sub take {
+sub take :Synchronized {
     my $self = shift;
-    return Patro::synchronize(
-	$self,
-	sub {
-	    while (@{$self->{queue}} == 0) {
-		return if $self->{done};
-		#Test::More::diag
-		#    "BlockingQueue waiting to take in ",threads->tid;
-		Patro::wait($self);
-	    }
-	    my $item = shift @{$self->{queue}};
-	    Patro::notify($self,-1);
-	    $self->{val2} += $item;
-	    return $item;
-	} );
+    while (@{$self->{queue}} == 0) {
+	return if $self->{done};
+	Patro::wait($self);
+    }
+    my $item = shift @{$self->{queue}};
+    Patro::notify($self,-1);
+    $self->{val2} += $item;
+    return $item;
 }
 
 =pod notes
